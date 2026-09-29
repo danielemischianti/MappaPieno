@@ -96,7 +96,9 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--max", type=int, default=6000)
     ap.add_argument("--giorni", type=int, default=7, help="rilegge le schede più vecchie di N giorni")
-    ap.add_argument("--thread", type=int, default=6)
+    ap.add_argument("--thread", type=int, default=2)
+    ap.add_argument("--pausa", type=float, default=0.3, help="secondi tra una richiesta e l'altra, per thread")
+    ap.add_argument("--minuti", type=float, default=20, help="tempo massimo per esecuzione")
     args = ap.parse_args()
 
     prezzi = load_json(args.prezzi)
@@ -126,37 +128,66 @@ def main():
                        "orari": dict(orari)}, f, ensure_ascii=False, separators=(",", ":"))
         os.replace(tmp, args.out)
 
+    diag = {"letti": 0, "errori": 0, "codici": {}, "interrotto": ""}
+
+    def save():
+        tmp = args.out + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as f:
+            json.dump({"fonte": "MIMIT - Osservaprezzi carburanti, schede impianto",
+                       "generato": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
+                       "ultimo_giro": diag, "orari": dict(orari)}, f, ensure_ascii=False, separators=(",", ":"))
+        os.replace(tmp, args.out)
+
     save()   # subito la cache: se il passo viene interrotto, il file resta valido
     stop = threading.Event()
-    ok = err = 0
     lock = threading.Lock()
+    deadline = time.monotonic() + args.minuti * 60
+    fails_in_row = 0
+
+    def note_err(code):
+        nonlocal fails_in_row
+        with lock:
+            diag["errori"] += 1
+            diag["codici"][code] = diag["codici"].get(code, 0) + 1
+            fails_in_row += 1
+            if fails_in_row >= 10 and not stop.is_set():
+                diag["interrotto"] = "10 errori di fila (ultimo: " + code + ")"
+                stop.set()
 
     def work(sid):
-        nonlocal ok, err
-        if stop.is_set():
-            return
-        try:
-            d = fetch_hours(sid)
-            with lock:
-                orari[sid] = {"t": today.isoformat(), "d": d}
-                ok += 1
-                if ok % 500 == 0:
-                    save()
-        except urllib.error.HTTPError as e:
-            with lock:
-                err += 1
-            if e.code in (403, 429, 503):
-                stop.set()   # il servizio chiede di rallentare: ci fermiamo e riprendiamo al prossimo giro
-        except Exception:
-            with lock:
-                err += 1
-        time.sleep(0.05)
+        nonlocal fails_in_row
+        for attempt in range(3):
+            if stop.is_set():
+                return
+            if time.monotonic() > deadline:
+                diag["interrotto"] = diag["interrotto"] or "tempo massimo raggiunto"
+                stop.set()
+                return
+            try:
+                d = fetch_hours(sid)
+                with lock:
+                    orari[sid] = {"t": today.isoformat(), "d": d}
+                    diag["letti"] += 1
+                    fails_in_row = 0
+                    if diag["letti"] % 500 == 0:
+                        save()
+                time.sleep(args.pausa)
+                return
+            except urllib.error.HTTPError as e:
+                note_err(str(e.code))
+                if e.code == 404:
+                    return
+                wait = e.headers.get("Retry-After") if e.headers else None
+                time.sleep(min(60, int(wait)) if wait and wait.isdigit() else 10 * (attempt + 1))
+            except Exception as e:
+                note_err(type(e).__name__)
+                time.sleep(5 * (attempt + 1))
 
     with cf.ThreadPoolExecutor(max_workers=args.thread) as ex:
         list(ex.map(work, todo))
 
     save()
-    print(f"OK: letti {ok}, errori {err}{' (interrotto dal servizio)' if stop.is_set() else ''}; "
+    print(f"OK: letti {diag['letti']}, errori {diag['errori']} {diag['codici']} {diag['interrotto']}; "
           f"{len(orari)}/{len(ids)} impianti con scheda -> {args.out}", file=sys.stderr)
 
 
