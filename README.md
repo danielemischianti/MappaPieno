@@ -7,7 +7,7 @@ con il costo reale del tragitto (pedaggi compresi) per una Skoda Kamiq 1.5 TGI G
 - Prezzi ufficiali MIMIT (Osservaprezzi carburanti), aggiornati ogni mattina.
 - Percorsi stradali reali (OSRM / OpenStreetMap). I tratti a pedaggio sono tratteggiati in arancio;
   tra il percorso più veloce e le alternative viene scelto il più economico.
-- Classifica per **costo totale** = rifornimento + tragitto (andata e ritorno, disattivabile).
+- Classifica per **costo totale** = pieno (13,8 kg di metano o 9 l di benzina) + tragitto (andata e ritorno, disattivabile).
 - Per ogni distributore: costo del tragitto a metano (4,9 kg/100 km) e a benzina (5,9 l/100 km), pedaggi, link a Google Maps e Waze.
 - Consumi, quantità di rifornimento, tariffa pedaggio e raggio si cambiano dal pannello "Auto e parametri".
 

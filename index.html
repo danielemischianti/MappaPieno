@@ -190,14 +190,14 @@ details.set summary{padding:10px 12px;cursor:pointer;font-weight:600;font-size:1
       <div class="grid">
         <label>Consumo metano (kg/100 km)<input id="c_m" type="number" step="0.1" min="1" value="4.9"></label>
         <label>Consumo benzina (l/100 km)<input id="c_b" type="number" step="0.1" min="1" value="5.9"></label>
-        <label>Rifornimento metano (kg)<input id="q_m" type="number" step="0.5" min="1" value="12"></label>
+        <label>Rifornimento metano (kg)<input id="q_m" type="number" step="0.1" min="1" value="13.8"></label>
         <label>Rifornimento benzina (l)<input id="q_b" type="number" step="0.5" min="1" value="9"></label>
         <label>Pedaggio stimato (€/km)<input id="toll" type="number" step="0.005" min="0" value="0.080"></label>
         <label>Percorsi calcolati (max)<input id="topk" type="number" step="1" min="3" max="15" value="8"></label>
       </div>
       <div class="foot" style="padding:0 12px 12px">
         Skoda Kamiq 1.5 TGI G-TEC (2020): serbatoi metano 13,8 kg, benzina 9 l. Il rifornimento predefinito
-        è quello tipico partendo dalla riserva. Il costo del tragitto usa il prezzo del distributore di arrivo;
+        è il pieno completo. Il costo del tragitto usa il prezzo del distributore di arrivo;
         se lì non c'è quel carburante, usa la mediana della zona.
       </div>
     </details>
@@ -236,6 +236,7 @@ const PREF_KEYS = ["c_m","c_b","q_m","q_b","toll","topk","radius","ar","aut"];
 function loadPrefs(){
   try{
     const p = JSON.parse(localStorage.getItem("pienoKamiq") || "{}");
+    if(p.v !== 2) delete p.q_m;   // nuovo predefinito: pieno metano 13,8 kg
     for(const k of PREF_KEYS){ const el = $("#"+k); if(!el || p[k]==null) continue; el.type==="checkbox" ? el.checked = p[k] : el.value = p[k]; }
     if(p.fuel) S.fuel = p.fuel;
     if(p.origin) { S.origin = p.origin; S.originLabel = p.originLabel || "ultima posizione"; }
@@ -243,14 +244,14 @@ function loadPrefs(){
 }
 function savePrefs(){
   try{
-    const p = {fuel:S.fuel, origin:S.origin, originLabel:S.originLabel};
+    const p = {v:2, fuel:S.fuel, origin:S.origin, originLabel:S.originLabel};
     for(const k of PREF_KEYS){ const el = $("#"+k); p[k] = el.type==="checkbox" ? el.checked : el.value; }
     localStorage.setItem("pienoKamiq", JSON.stringify(p));
   }catch(e){}
 }
 const P = () => ({
   cm: +$("#c_m").value || 4.9, cb: +$("#c_b").value || 5.9,
-  qm: +$("#q_m").value || 12, qb: +$("#q_b").value || 9,
+  qm: +$("#q_m").value || 13.8, qb: +$("#q_b").value || 9,
   toll: +$("#toll").value || 0, topk: Math.min(15, Math.max(3, +$("#topk").value || 8)),
   radius: +$("#radius").value * 1000, ar: $("#ar").checked, aut: $("#aut").checked,
 });
