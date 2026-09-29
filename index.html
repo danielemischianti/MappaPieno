@@ -204,8 +204,8 @@ details.set summary{padding:10px 12px;cursor:pointer;font-weight:600;font-size:1
 
     <p class="foot">
       Prezzi: open data MIMIT Osservaprezzi carburanti, comunicati dai gestori (la stessa base dei siti di confronto come prezzobenzina.it).
-      Percorsi: OSRM su dati © OpenStreetMap. I tratti a pedaggio vengono da OSM; il costo del pedaggio è una stima a chilometro,
-      le tangenziali e il GRA sono gratuiti. Tocca la mappa a lungo per spostare il punto di partenza.
+      Percorsi: OSRM su dati © OpenStreetMap. I tratti a pedaggio sono riconosciuti dalla sigla dell'autostrada; il costo è una stima a chilometro,
+      le tangenziali e il GRA sono gratuiti. I prezzi fermi da oltre 30 giorni sono esclusi. Tocca la mappa a lungo per spostare il punto di partenza.
     </p>
   </section>
 </main>
@@ -215,7 +215,8 @@ details.set summary{padding:10px 12px;cursor:pointer;font-weight:600;font-size:1
 "use strict";
 const OSRM = "https://router.project-osrm.org";   // server di percorso (dimostrativo, uso leggero)
 const DATA_URL = "data/prezzi.json";
-const STALE_DAYS = 7;
+const STALE_DAYS = 7;                              // oltre: prezzo segnalato come vecchio
+const MAX_AGE_DAYS = 30;                           // oltre: distributore escluso (prezzo inaffidabile)
 const ROAD_FACTOR = 1.35;                          // stima percorso stradale / linea d'aria
 
 const $ = s => document.querySelector(s);
@@ -316,19 +317,32 @@ function hav(a, b){
 const median = arr => { const a = arr.filter(x => x != null).sort((x,y)=>x-y); return a.length ? a[Math.floor(a.length/2)] : null; };
 
 /* ---------- percorsi OSRM ---------- */
-async function osrmRoute(from, to, noToll){
-  const key = from.map(x=>x.toFixed(4)).join(",") + ">" + to.join(",") + (noToll ? "|nt" : "");
+// Autostrade italiane senza pedaggio (GRA, Roma-Fiumicino, A2 del Mediterraneo, siciliane A19/A29)
+const FREE_MOTORWAYS = new Set(["A90","A91","A2","A19","A29","A29DIR","A29RACC"]);
+function isTollStep(st){
+  if((st.intersections || []).some(x => (x.classes || []).includes("toll"))) return true;
+  const refs = String(st.ref || "").toUpperCase().split(/[;,\s]+/).filter(Boolean);
+  const mw = refs.filter(r => /^A\d+/.test(r));
+  if(mw.length) return mw.some(r => !FREE_MOTORWAYS.has(r) && !FREE_MOTORWAYS.has(r.match(/^A\d+/)[0]));
+  return /^autostrada\b/i.test(st.name || "") && !/grande raccordo/i.test(st.name || "");
+}
+function parseRoute(rt){
+  let tollM = 0; const segs = [];
+  for(const st of rt.legs[0].steps){
+    const toll = isTollStep(st);
+    if(toll) tollM += st.distance;
+    if(st.geometry?.coordinates?.length > 1) segs.push({toll, pts: st.geometry.coordinates.map(c => [c[1], c[0]])});
+  }
+  return {dist: rt.distance, dur: rt.duration, tollM, segs};
+}
+// Restituisce il percorso più veloce e le alternative proposte da OSRM
+async function osrmRoutes(from, to){
+  const key = from.map(x=>x.toFixed(4)).join(",") + ">" + to.join(",");
   if(S.routes.has(key)) return S.routes.get(key);
-  const url = `${OSRM}/route/v1/driving/${from[1]},${from[0]};${to[1]},${to[0]}?overview=false&steps=true&geometries=geojson${noToll ? "&exclude=toll" : ""}`;
+  const url = `${OSRM}/route/v1/driving/${from[1]},${from[0]};${to[1]},${to[0]}?overview=false&steps=true&geometries=geojson&alternatives=3`;
   const pr = fetch(url).then(r => r.ok ? r.json() : Promise.reject(new Error("OSRM " + r.status))).then(j => {
     if(j.code !== "Ok" || !j.routes?.length) throw new Error(j.message || j.code);
-    const rt = j.routes[0]; let tollM = 0; const segs = [];
-    for(const st of rt.legs[0].steps){
-      const toll = (st.intersections || []).some(x => (x.classes || []).includes("toll"));
-      if(toll) tollM += st.distance;
-      if(st.geometry?.coordinates?.length > 1) segs.push({toll, pts: st.geometry.coordinates.map(c => [c[1], c[0]])});
-    }
-    return {dist: rt.distance, dur: rt.duration, tollM, segs, noToll: !!noToll};
+    return j.routes.map(parseRoute);
   });
   S.routes.set(key, pr);
   pr.catch(() => S.routes.delete(key));
@@ -354,11 +368,11 @@ function costs(st, route, p, ref){
   const trip = S.fuel === "metano" ? tripM : tripB;
   return {distKm, tollKm, tollEur, tripM, tripB, fill, trip, total: fill + trip, dur: route ? route.dur : null, est: !route};
 }
-function pickRoute(st, a, b, p, ref){
-  // a = percorso più veloce, b = percorso senza pedaggi (se esiste): tieni il più economico per il carburante scelto
-  if(!a) return b; if(!b) return a;
-  const ca = costs(st, a, p, ref), cb = costs(st, b, p, ref);
-  return cb.trip + 0.005 < ca.trip ? b : a;
+function pickRoute(st, routes, p, ref){
+  // tra il percorso più veloce e le alternative tieni il più economico per il carburante scelto
+  let best = null, bc = Infinity;
+  for(const r of routes){ const c = costs(st, r, p, ref).trip; if(c + 0.005 < bc){ best = r; bc = c; } }
+  return best;
 }
 
 let runId = 0;
@@ -375,8 +389,8 @@ async function compute(){
   let res = inR.map(x => {
     const agg = fuel === "metano" ? x.s.aggM : x.s.aggB;
     const age = agg ? (today - new Date(agg)) / 864e5 : 99;
-    return {s: x.s, air: x.air, route: null, c: costs(x.s, null, p, ref), old: age > STALE_DAYS, agg};
-  }).sort((a, b) => a.c.total - b.c.total);
+    return {s: x.s, air: x.air, route: null, c: costs(x.s, null, p, ref), old: age > STALE_DAYS, age, agg};
+  }).filter(x => x.age <= MAX_AGE_DAYS).sort((a, b) => a.c.total - b.c.total);
   S.results = res; render(true);
 
   // percorsi reali per i migliori candidati (più il più vicino, per il confronto)
@@ -385,11 +399,12 @@ async function compute(){
   S.busy++; render(true);
   await pool(cand, 3, async x => {
     const to = [x.s.lat, x.s.lon];
-    const fast = await osrmRoute(S.origin, to, false).catch(() => null);
-    let alt = null;
-    if(fast && fast.tollM > 200) alt = await osrmRoute(S.origin, to, true).catch(() => null);
-    x.route = pickRoute(x.s, fast, alt, p, ref);
-    x.hasToll = !!(fast && fast.tollM > 200);
+    const routes = await osrmRoutes(S.origin, to).catch(() => null);
+    if(routes){
+      x.route = pickRoute(x.s, routes, p, ref);
+      x.hasToll = routes[0].tollM > 200;
+      x.route.noToll = x.hasToll && x.route.tollM <= 200;
+    }
     if(x.route) x.c = costs(x.s, x.route, p, ref);
     if(id === runId){ res.sort((a, b) => (a.c.est - b.c.est) || (a.c.total - b.c.total)); render(true); }
   });

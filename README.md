@@ -6,7 +6,7 @@ con il costo reale del tragitto (pedaggi compresi) per una Skoda Kamiq 1.5 TGI G
 - Posizione dal GPS del telefono, da un indirizzo o tenendo premuto sulla mappa.
 - Prezzi ufficiali MIMIT (Osservaprezzi carburanti), aggiornati ogni mattina.
 - Percorsi stradali reali (OSRM / OpenStreetMap). I tratti a pedaggio sono tratteggiati in arancio;
-  se esiste un'alternativa senza pedaggio più economica, viene scelta quella.
+  tra il percorso più veloce e le alternative viene scelto il più economico.
 - Classifica per **costo totale** = rifornimento + tragitto (andata e ritorno, disattivabile).
 - Per ogni distributore: costo del tragitto a metano (4,9 kg/100 km) e a benzina (5,9 l/100 km), pedaggi, link a Google Maps e Waze.
 - Consumi, quantità di rifornimento, tariffa pedaggio e raggio si cambiano dal pannello "Auto e parametri".
@@ -36,11 +36,11 @@ Poi apri http://localhost:8000 (il GPS del browser funziona solo su https o loca
 - **Tragitto a metano** = km × 4,9/100 × prezzo del metano al distributore di arrivo + pedaggi.
 - **Tragitto a benzina** = km × 5,9/100 × prezzo benzina self al distributore di arrivo + pedaggi.
   Se il distributore non vende quel carburante si usa la mediana dei prezzi entro 40 km.
-- **Pedaggi**: km su strade marcate a pedaggio in OpenStreetMap × tariffa (predefinita 0,080 €/km, media classe A).
+- **Pedaggi**: km su autostrade a pagamento (riconosciute dalla sigla A1, A24…; escluse le gratuite come GRA/A90, A91, A2, A19, A29) × tariffa (predefinita 0,080 €/km, media classe A).
   È una stima: tratte come A24/A25 costano di più al km, tangenziali e GRA sono gratuite.
 - I percorsi reali vengono calcolati per i migliori 8 candidati (modificabile) e per il più vicino;
   gli altri mostrano una stima con l'etichetta "stima".
-- I prezzi non comunicati da più di 7 giorni sono segnalati.
+- I prezzi non comunicati da più di 7 giorni sono segnalati, quelli fermi da oltre 30 giorni esclusi.
 
 ## Fonti e servizi
 - Prezzi: MIMIT, open data Osservaprezzi carburanti (`anagrafica_impianti_attivi.csv`, `prezzo_alle_8.csv`).
