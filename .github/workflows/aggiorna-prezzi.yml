@@ -38,7 +38,7 @@ jobs:
         run: |
           mkdir -p _site/data
           python3 update.py --prov "$PROVINCE" --out _site/data/prezzi.json
-          cp index.html _site/
+          cp index.html manifest.webmanifest _site/ && cp -r icons _site/
       - name: Aggiorna orari di apertura
         timeout-minutes: 25
         continue-on-error: true   # se il servizio orari non risponde, si pubblicano comunque i prezzi

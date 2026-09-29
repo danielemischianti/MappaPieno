@@ -1,0 +1,17 @@
+{
+  "name": "Pieno Kamiq",
+  "short_name": "Pieno Kamiq",
+  "description": "Il distributore di metano o benzina più conveniente da dove sei, con il costo del tragitto.",
+  "lang": "it",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#16212b",
+  "theme_color": "#16212b",
+  "icons": [
+    {"src": "icons/icon-192.png", "sizes": "192x192", "type": "image/png"},
+    {"src": "icons/icon-512.png", "sizes": "512x512", "type": "image/png"},
+    {"src": "icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable"}
+  ]
+}
