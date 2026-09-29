@@ -137,6 +137,7 @@ ol.st{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:
 .pill.self{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
 .pill.unk{background:color-mix(in srgb,var(--ink-3) 12%,transparent);color:var(--ink-3);font-weight:500}
 .pill.mode{background:color-mix(in srgb,var(--metano) 14%,transparent);color:var(--metano)}
+.st .links button.hide{color:var(--ink-2)}
 .st .links button{font:600 13px Barlow,system-ui,sans-serif;color:var(--accent);background:transparent;border:1px solid var(--line);border-radius:8px;padding:5px 10px;cursor:pointer}
 .toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:9px 14px;border-radius:8px;font-size:13px;z-index:3000;max-width:calc(100% - 32px);box-shadow:var(--shadow)}
 .totem .status{grid-column:1/3;font-size:13px;color:#9fb0bb}
@@ -203,6 +204,7 @@ details.set summary{padding:10px 12px;cursor:pointer;font-weight:600;font-size:1
     <div class="list-h"><h2>Classifica per costo totale</h2><span id="count"></span></div>
     <ol class="st" id="list"></ol>
 
+    <div class="msg" id="hiddenBox" hidden></div>
     <details class="set" id="settings">
       <summary>Auto e parametri di calcolo</summary>
       <div class="grid">
@@ -248,9 +250,19 @@ function priceHTML(p){ if(p==null) return "–"; const s = fmt(p,3); return s.sl
 /* ---------- stato ---------- */
 const S = {
   fuel: "metano", data: null, stations: [], origin: null, originLabel: "",
-  selected: null, routes: new Map(), results: [], busy: 0,
+  selected: null, routes: new Map(), results: [], busy: 0, hidden: {},
 };
 const PREF_KEYS = ["c_m","c_b","q_m","q_b","toll","topk","radius","ar","aut","aperti"];
+// distributori nascosti dall'utente (es. "non ha più il metano"), per carburante: {"metano": {id: "motivo"}}
+function loadHidden(){ try{ S.hidden = JSON.parse(localStorage.getItem("pienoKamiqNascosti") || "{}"); }catch(e){ S.hidden = {}; } }
+function saveHidden(){ try{ localStorage.setItem("pienoKamiqNascosti", JSON.stringify(S.hidden)); }catch(e){} }
+function isHidden(s, fuel){ return !!(S.hidden[fuel] && S.hidden[fuel][String(s.id)]); }
+function renderHiddenBox(){
+  const box = $("#hiddenBox"), h = S.hidden[S.fuel] || {}, n = Object.keys(h).length;
+  box.hidden = !n;
+  if(n) box.innerHTML = `${n === 1 ? "1 distributore nascosto" : n + " distributori nascosti"} per ${S.fuel}.
+    <button type="button" class="btn" id="unhide" style="margin-left:6px">Mostra di nuovo</button>`;
+}
 function loadPrefs(){
   try{
     const p = JSON.parse(localStorage.getItem("pienoKamiq") || "{}");
@@ -469,7 +481,7 @@ async function compute(){
     const agg = fuel === "metano" ? x.s.aggM : x.s.aggB;
     const age = agg ? (today - new Date(agg)) / 864e5 : 99;
     return {s: x.s, air: x.air, route: null, c: costs(x.s, null, p, ref), old: age > STALE_DAYS, age, agg};
-  }).filter(x => x.age <= MAX_AGE_DAYS && !(p.aperti && stato(x.s, fuel).avail === false)).sort((a, b) => a.c.total - b.c.total);
+  }).filter(x => x.age <= MAX_AGE_DAYS && !isHidden(x.s, fuel) && !(p.aperti && stato(x.s, fuel).avail === false)).sort((a, b) => a.c.total - b.c.total);
   S.results = res; render(true);
 
   // percorsi reali per i migliori candidati (più il più vicino, per il confronto)
@@ -502,6 +514,7 @@ function priceColor(v, lo, hi){
   return `hsl(${h} 60% 40%)`;
 }
 function render(fit){
+  renderHiddenBox();
   const p = P(), fuel = S.fuel, unit = fuel === "metano" ? "€/kg" : "€/l";
   document.body.className = "fuel-" + fuel;
   document.querySelectorAll(".seg button").forEach(b => b.setAttribute("aria-pressed", b.dataset.fuel === fuel));
@@ -575,7 +588,7 @@ function render(fit){
         <div><span>Benzina qui</span>${s.benzina != null ? fmt(s.benzina, 3) + " €/l" + (s.benzinaServito ? " (servito)" : " self") : "non disponibile"}</div>
         ${oo ? `<div style="grid-column:1/-1"><span>Orari</span>${orariTxt(oo)}</div>` : ""}
       </div>
-      <div class="links"><a href="${nav}" target="_blank" rel="noopener">Naviga con Google Maps</a><a href="${waze}" target="_blank" rel="noopener">Waze</a><button type="button" class="pb" data-id="${s.id}">Controlla su Prezzi Benzina</button></div>` : ""}
+      <div class="links"><a href="${nav}" target="_blank" rel="noopener">Naviga con Google Maps</a><a href="${waze}" target="_blank" rel="noopener">Waze</a><button type="button" class="pb" data-id="${s.id}">Controlla su Prezzi Benzina</button><button type="button" class="hide" data-id="${s.id}">${fuel === "metano" ? "Non ha il metano: nascondi" : "Nascondi"}</button></div>` : ""}
     </li>`;
   }).join("");
 
@@ -639,6 +652,11 @@ function select(id, fromMap){
 /* ---------- eventi ---------- */
 document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => { S.fuel = b.dataset.fuel; S.selected = null; savePrefs(); compute(); }));
 $("#list").addEventListener("click", e => {
+  const hb = e.target.closest("button.hide");
+  if(hb){
+    (S.hidden[S.fuel] ||= {})[hb.dataset.id] = new Date().toISOString().slice(0, 10);
+    saveHidden(); S.selected = null; toast("Distributore nascosto: puoi ripristinarlo dal riquadro sopra le impostazioni"); compute(); return;
+  }
   const pb = e.target.closest("button.pb");
   if(pb){ const st = S.stations.find(x => String(x.id) === pb.dataset.id); if(st) openPrezziBenzina(st); return; }
   if(e.target.closest("a")) return; const li = e.target.closest("li"); if(li) select(isNaN(+li.dataset.id) ? li.dataset.id : +li.dataset.id); });
@@ -657,8 +675,10 @@ $("#refresh").addEventListener("click", async () => {
 
 setInterval(() => { if(S.results.length && !document.hidden) render(false); }, 60000);   // aggiorna aperto/chiuso
 
+$("#hiddenBox").addEventListener("click", e => { if(e.target.id === "unhide"){ delete S.hidden[S.fuel]; saveHidden(); compute(); } });
+
 (async function start(){
-  loadPrefs(); render();
+  loadHidden(); loadPrefs(); render();
   if(S.origin){ $("#where").textContent = S.originLabel; map.setView(S.origin, 12); }
   try{ await loadData(); }catch(e){ note(esc(e.message), true); return; }
   if(S.origin) compute();

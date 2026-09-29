@@ -14,6 +14,9 @@ con il costo reale del tragitto (pedaggi compresi) per una Skoda Kamiq 1.5 TGI G
   in quel caso compare "orari non comunicati" e il distributore resta in classifica.
 - **Metano self o con personale**, dai prezzi comunicati al MIMIT (con entrambi i prezzi se il distributore li ha).
   Se il distributore è chiuso e il self vale solo per la benzina, il metano risulta non disponibile.
+- Pulsante **Non ha il metano: nascondi** (o "Nascondi" per la benzina): toglie dalla classifica un distributore
+  che nei dati ufficiali risulta ma nella realtà non eroga quel carburante. La scelta resta salvata sul telefono
+  e si annulla con "Mostra di nuovo".
 - Pulsante **Controlla su Prezzi Benzina**: copia nome e indirizzo e apre l'app Prezzi Benzina (Android: l'app,
   iPhone: App Store, computer: il sito), per verificare a mano le segnalazioni degli utenti.
 - Consumi, quantità di rifornimento, tariffa pedaggio e raggio si cambiano dal pannello "Auto e parametri".
@@ -48,6 +51,13 @@ Poi apri http://localhost:8000 (il GPS del browser funziona solo su https o loca
 - I percorsi reali vengono calcolati per i migliori 8 candidati (modificabile) e per il più vicino;
   gli altri mostrano una stima con l'etichetta "stima".
 - I prezzi non comunicati da più di 7 giorni sono segnalati, quelli fermi da oltre 30 giorni esclusi.
+
+## Metano: quali prezzi vengono usati
+
+Solo la voce **Metano** dei dati MIMIT. La voce **L-GNC** (metano compresso ottenuto da gas liquefatto) è
+esclusa: in teoria va bene per le auto a metano, ma nei dati compare anche in impianti che vendono solo GNL per
+camion. Esempio: Eni Borghesiana (Roma) comunica ogni giorno un prezzo L-GNC, ma il metano per auto è stato
+tolto nel 2024.
 
 ## Orari: come vengono aggiornati
 

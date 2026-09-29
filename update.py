@@ -26,8 +26,11 @@ URL_PREZZI = "https://www.mimit.gov.it/images/exportCSV/prezzo_alle_8.csv"
 
 # Carburanti che interessano la Kamiq G-TEC
 BENZINA = {"benzina"}                 # solo benzina normale (niente 98/100 ottani)
-METANO = {"metano", "l-gnc"}          # L-GNC = metano compresso da GNL, stesso uso del metano
-# GNL (liquido, per camion) escluso di proposito
+METANO = {"metano"}
+# L-GNC escluso: in teoria è metano compresso ottenuto da GNL, ma nei dati MIMIT compare anche in impianti
+# che vendono solo GNL per camion (es. Eni Borghesiana, Roma: metano rimosso nel 2024, L-GNC ancora comunicato).
+# GNL (liquido, per camion) escluso.
+LGNC = {"l-gnc"}
 
 
 def fetch(url):
@@ -132,7 +135,7 @@ def main():
             "prov": prov,
             "tipo": r[ia.get("Tipo Impianto", 0)] if "Tipo Impianto" in ia else "",
             "lat": round(lat, 5), "lon": round(lon, 5),
-            "bs": None, "bv": None, "ms": None, "mv": None, "db": "", "dm": "",
+            "bs": None, "bv": None, "ms": None, "mv": None, "db": "", "dm": "", "lg": False,
         }
 
     for r in r_p:
@@ -150,6 +153,8 @@ def main():
             if s[key] is None or price < s[key]:
                 s[key] = price
             s["db"] = max(s["db"], day)
+        elif fuel in LGNC:
+            s["lg"] = True
         elif fuel in METANO:
             key = "ms" if self_ else "mv"
             if s[key] is None or price < s[key]:
@@ -168,7 +173,9 @@ def main():
                     s["comune"], s["prov"], 1 if "autostrad" in s["tipo"].lower() else 0,
                     s["lat"], s["lon"], s["bs"], s["bv"], m, s["db"], s["dm"], s["ms"], s["mv"]])
 
+    solo_lgnc = sum(1 for s in stations.values() if s["lg"] and s["ms"] is None and s["mv"] is None)
     data = {
+        "esclusi_solo_lgnc": solo_lgnc,
         "fonte": "MIMIT - Osservaprezzi carburanti (open data)",
         "estrazione": ext_p or ext_a,
         "generato": dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ"),
@@ -181,7 +188,7 @@ def main():
         json.dump(data, f, ensure_ascii=False, separators=(",", ":"))
     os.replace(tmp, args.out)
     n_m = sum(1 for s in out if s[11] is not None)
-    print(f"OK: {len(out)} impianti ({n_m} con metano) -> {args.out}", file=sys.stderr)
+    print(f"OK: {len(out)} impianti ({n_m} con metano; {solo_lgnc} con solo L-GNC esclusi) -> {args.out}", file=sys.stderr)
 
 
 if __name__ == "__main__":
