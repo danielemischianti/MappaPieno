@@ -132,7 +132,7 @@ def main():
             "prov": prov,
             "tipo": r[ia.get("Tipo Impianto", 0)] if "Tipo Impianto" in ia else "",
             "lat": round(lat, 5), "lon": round(lon, 5),
-            "bs": None, "bv": None, "m": None, "db": "", "dm": "",
+            "bs": None, "bv": None, "ms": None, "mv": None, "db": "", "dm": "",
         }
 
     for r in r_p:
@@ -151,19 +151,22 @@ def main():
                 s[key] = price
             s["db"] = max(s["db"], day)
         elif fuel in METANO:
-            if s["m"] is None or price < s["m"]:
-                s["m"] = price
+            key = "ms" if self_ else "mv"
+            if s[key] is None or price < s[key]:
+                s[key] = price
             s["dm"] = max(s["dm"], day)
 
     fields = ["id", "nome", "bandiera", "indirizzo", "comune", "prov", "autostrada",
-              "lat", "lon", "benzina_self", "benzina_servito", "metano", "agg_benzina", "agg_metano"]
+              "lat", "lon", "benzina_self", "benzina_servito", "metano", "agg_benzina", "agg_metano",
+              "metano_self", "metano_servito"]
     out = []
     for sid, s in stations.items():
-        if s["bs"] is None and s["bv"] is None and s["m"] is None:
+        m = min([p for p in (s["ms"], s["mv"]) if p is not None], default=None)
+        if s["bs"] is None and s["bv"] is None and m is None:
             continue
         out.append([int(sid) if sid.isdigit() else sid, s["nome"], s["bandiera"], s["indirizzo"],
                     s["comune"], s["prov"], 1 if "autostrad" in s["tipo"].lower() else 0,
-                    s["lat"], s["lon"], s["bs"], s["bv"], s["m"], s["db"], s["dm"]])
+                    s["lat"], s["lon"], s["bs"], s["bv"], m, s["db"], s["dm"], s["ms"], s["mv"]])
 
     data = {
         "fonte": "MIMIT - Osservaprezzi carburanti (open data)",

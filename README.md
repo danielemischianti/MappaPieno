@@ -9,6 +9,13 @@ con il costo reale del tragitto (pedaggi compresi) per una Skoda Kamiq 1.5 TGI G
   tra il percorso più veloce e le alternative viene scelto il più economico.
 - Classifica per **costo totale** = pieno (13,8 kg di metano o 9 l di benzina) + tragitto (andata e ritorno, disattivabile).
 - Per ogni distributore: costo del tragitto a metano (4,9 kg/100 km) e a benzina (5,9 l/100 km), pedaggi, link a Google Maps e Waze.
+- **Aperto adesso?** Orari di apertura dalle schede MIMIT dei distributori (ora italiana, festivi compresi):
+  aperto, chiuso, oppure chiuso con self attivo. Filtro "Solo aperti ora". Molti gestori non comunicano gli orari:
+  in quel caso compare "orari non comunicati" e il distributore resta in classifica.
+- **Metano self o con personale**, dai prezzi comunicati al MIMIT (con entrambi i prezzi se il distributore li ha).
+  Se il distributore è chiuso e il self vale solo per la benzina, il metano risulta non disponibile.
+- Pulsante **Controlla su Prezzi Benzina**: copia nome e indirizzo e apre l'app Prezzi Benzina (Android: l'app,
+  iPhone: App Store, computer: il sito), per verificare a mano le segnalazioni degli utenti.
 - Consumi, quantità di rifornimento, tariffa pedaggio e raggio si cambiano dal pannello "Auto e parametri".
 
 ## Pubblicarla gratis con GitHub Pages (consigliato, funziona dal telefono)
@@ -41,6 +48,13 @@ Poi apri http://localhost:8000 (il GPS del browser funziona solo su https o loca
 - I percorsi reali vengono calcolati per i migliori 8 candidati (modificabile) e per il più vicino;
   gli altri mostrano una stima con l'etichetta "stima".
 - I prezzi non comunicati da più di 7 giorni sono segnalati, quelli fermi da oltre 30 giorni esclusi.
+
+## Orari: come vengono aggiornati
+
+Gli orari non sono nei file giornalieri: `orari.py` legge la scheda di ogni distributore dal servizio MIMIT,
+al massimo 6000 schede per esecuzione (prima quelle mai lette, iniziando dai distributori di metano, poi quelle
+più vecchie di 7 giorni). Il resto viene preso dal file pubblicato il giorno prima. Al primo avvio servono
+un paio di giorni per coprire tutta Italia.
 
 ## Fonti e servizi
 - Prezzi: MIMIT, open data Osservaprezzi carburanti (`anagrafica_impianti_attivi.csv`, `prezzo_alle_8.csv`).

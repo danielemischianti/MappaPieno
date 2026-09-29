@@ -125,6 +125,16 @@ ol.st{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:
 .pill.old{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
 .pill.aut{background:color-mix(in srgb,var(--ink-3) 18%,transparent);color:var(--ink-2)}
 .pill.est{background:color-mix(in srgb,var(--ink-3) 14%,transparent);color:var(--ink-3)}
+.pill.open{background:color-mix(in srgb,var(--good) 16%,transparent);color:var(--good)}
+.pill.closed{background:color-mix(in srgb,var(--bad) 14%,transparent);color:var(--bad)}
+.pill.self{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+.pill.unk{background:color-mix(in srgb,var(--ink-3) 12%,transparent);color:var(--ink-3);font-weight:500}
+.pill.mode{background:color-mix(in srgb,var(--metano) 14%,transparent);color:var(--metano)}
+.st .links button{font:600 13px Barlow,system-ui,sans-serif;color:var(--accent);background:transparent;border:1px solid var(--line);border-radius:8px;padding:5px 10px;cursor:pointer}
+.toast{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--paper);padding:9px 14px;border-radius:8px;font-size:13px;z-index:3000;max-width:calc(100% - 32px);box-shadow:var(--shadow)}
+.totem .status{grid-column:1/3;font-size:13px;color:#9fb0bb}
+.totem .status b{font-weight:600}
+.totem .status .ok{color:#7fe0a2}.totem .status .no{color:#ff8f82}.totem .status .sf{color:var(--led)}
 .pill.free{background:color-mix(in srgb,var(--good) 16%,transparent);color:var(--good)}
 .msg{background:var(--card);border:1px dashed var(--line);border-radius:10px;padding:12px;font-size:14px;color:var(--ink-2)}
 .msg.err{border-style:solid;border-color:var(--bad);color:var(--bad)}
@@ -178,6 +188,7 @@ details.set summary{padding:10px 12px;cursor:pointer;font-weight:600;font-size:1
       </label>
       <label class="chip"><input type="checkbox" id="ar" checked> Andata e ritorno</label>
       <label class="chip"><input type="checkbox" id="aut" checked> Aree autostradali</label>
+      <label class="chip"><input type="checkbox" id="aperti"> Solo aperti ora</label>
     </div>
 
     <div id="best"></div>
@@ -232,7 +243,7 @@ const S = {
   fuel: "metano", data: null, stations: [], origin: null, originLabel: "",
   selected: null, routes: new Map(), results: [], busy: 0,
 };
-const PREF_KEYS = ["c_m","c_b","q_m","q_b","toll","topk","radius","ar","aut"];
+const PREF_KEYS = ["c_m","c_b","q_m","q_b","toll","topk","radius","ar","aut","aperti"];
 function loadPrefs(){
   try{
     const p = JSON.parse(localStorage.getItem("pienoKamiq") || "{}");
@@ -253,7 +264,7 @@ const P = () => ({
   cm: +$("#c_m").value || 4.9, cb: +$("#c_b").value || 5.9,
   qm: +$("#q_m").value || 13.8, qb: +$("#q_b").value || 9,
   toll: +$("#toll").value || 0, topk: Math.min(15, Math.max(3, +$("#topk").value || 8)),
-  radius: +$("#radius").value * 1000, ar: $("#ar").checked, aut: $("#aut").checked,
+  radius: +$("#radius").value * 1000, ar: $("#ar").checked, aut: $("#aut").checked, aperti: $("#aperti").checked,
 });
 
 /* ---------- mappa ---------- */
@@ -279,8 +290,14 @@ async function loadData(){
     aut: !!a[i.autostrada], lat: a[i.lat], lon: a[i.lon],
     benzina: a[i.benzina_self] ?? a[i.benzina_servito], benzinaServito: a[i.benzina_self] == null && a[i.benzina_servito] != null,
     metano: a[i.metano], aggB: a[i.agg_benzina], aggM: a[i.agg_metano],
+    benzinaSelf: a[i.benzina_self], metanoSelf: i.metano_self != null ? a[i.metano_self] : null,
+    metanoServito: i.metano_servito != null ? a[i.metano_servito] : a[i.metano],
   }));
   S.data = d;
+  try{
+    const o = await fetch("data/orari.json?t=" + Date.now(), {cache: "no-store"});
+    S.orari = o.ok ? (await o.json()).orari || {} : {};
+  }catch(e){ S.orari = {}; }
   const e = d.estrazione ? d.estrazione.split("-").reverse().join("/") : "";
   $("#meta").innerHTML = `Prezzi MIMIT del ${esc(e)}<br>${S.stations.length.toLocaleString("it-IT")} impianti`;
 }
@@ -376,6 +393,60 @@ function pickRoute(st, routes, p, ref){
   return best;
 }
 
+/* ---------- orari di apertura ---------- */
+function easter(y){ // calcolo della Pasqua (algoritmo di Gauss/Meeus)
+  const a=y%19,b=Math.floor(y/100),c=y%100,d=Math.floor(b/4),e=b%4,f=Math.floor((b+8)/25),g=Math.floor((b-f+1)/3),
+        h=(19*a+b-d-g+15)%30,i=Math.floor(c/4),k=c%4,l=(32+2*e+2*i-h-k)%7,m=Math.floor((a+11*h+22*l)/451),
+        mo=Math.floor((h+l-7*m+114)/31),da=((h+l-7*m+114)%31)+1;
+  return new Date(Date.UTC(y, mo-1, da));
+}
+function isHoliday(y, m, d){
+  const md = String(m).padStart(2,"0") + "-" + String(d).padStart(2,"0");
+  // feste nazionali (dal 2026 torna festivo anche il 4 ottobre, San Francesco)
+  if(["01-01","01-06","04-25","05-01","06-02","08-15","11-01","12-08","12-25","12-26"].includes(md) || (y >= 2026 && md === "10-04")) return true;
+  const pm = easter(y); pm.setUTCDate(pm.getUTCDate() + 1);   // Lunedì dell'Angelo
+  return pm.getUTCMonth() + 1 === m && pm.getUTCDate() === d;
+}
+function romeNow(){
+  const p = Object.fromEntries(new Intl.DateTimeFormat("en-GB", {timeZone: "Europe/Rome", year: "numeric", month: "numeric", day: "numeric",
+    hour: "numeric", minute: "numeric", hourCycle: "h23", weekday: "short"}).formatToParts(new Date()).map(x => [x.type, x.value]));
+  return {y: +p.year, m: +p.month, d: +p.day, min: (+p.hour % 24) * 60 + +p.minute,
+          dow: {Mon:1, Tue:2, Wed:3, Thu:4, Fri:5, Sat:6, Sun:7}[p.weekday]};
+}
+const hm = t => { const [h, m] = t.split(":").map(Number); return h * 60 + m; };
+const hhmm = n => String(Math.floor(n / 60) % 24).padStart(2, "0") + ":" + String(n % 60).padStart(2, "0");
+function stato(s, fuel){
+  const o = S.orari && S.orari[String(s.id)];
+  const selfFuel = fuel === "metano" ? s.metanoSelf != null : s.benzinaSelf != null;
+  if(!o) return {k: "unk", txt: "orari non disponibili", avail: null};
+  const now = romeNow();
+  let idx = now.dow - 1;
+  if(isHoliday(now.y, now.m, now.d) && o.d[7] && o.d[7][0] !== "") idx = 7;
+  const [code, self] = o.d[idx] || ["", 0];
+  const txtFest = idx === 7 ? " (festivo)" : "";
+  if(code === "") return {k: "unk", txt: "orari non comunicati", avail: null};
+  if(code === "H") return {k: "open", txt: "aperto 24 ore", avail: true};
+  let open = false, until = null, next = null;
+  if(code !== "C"){
+    for(const sp of code.split(" ")){
+      const [a, b] = sp.split("-").map(hm); const bb = b <= a ? b + 1440 : b;
+      if(now.min >= a && now.min < bb){ open = true; until = bb; }
+      else if(a > now.min && (next == null || a < next)) next = a;
+    }
+  }
+  if(open) return {k: "open", txt: "aperto fino alle " + hhmm(until) + txtFest, avail: true};
+  const closedTxt = code === "C" ? "chiuso oggi" + txtFest : (next != null ? "chiuso · apre alle " + hhmm(next) : "chiuso per oggi");
+  if(self && selfFuel) return {k: "self", txt: closedTxt + " · self attivo", avail: true};
+  if(self) return {k: "closed", txt: closedTxt + (fuel === "metano" ? " · self solo per benzina" : ""), avail: false};
+  return {k: "closed", txt: closedTxt, avail: false};
+}
+function metanoModo(s){
+  if(s.metanoSelf != null && s.metanoServito != null) return "self e con personale";
+  if(s.metanoSelf != null) return "self";
+  if(s.metanoServito != null) return "con personale";
+  return "";
+}
+
 let runId = 0;
 async function compute(){
   if(!S.data || !S.origin) { render(); return; }
@@ -391,7 +462,7 @@ async function compute(){
     const agg = fuel === "metano" ? x.s.aggM : x.s.aggB;
     const age = agg ? (today - new Date(agg)) / 864e5 : 99;
     return {s: x.s, air: x.air, route: null, c: costs(x.s, null, p, ref), old: age > STALE_DAYS, age, agg};
-  }).filter(x => x.age <= MAX_AGE_DAYS).sort((a, b) => a.c.total - b.c.total);
+  }).filter(x => x.age <= MAX_AGE_DAYS && !(p.aperti && stato(x.s, fuel).avail === false)).sort((a, b) => a.c.total - b.c.total);
   S.results = res; render(true);
 
   // percorsi reali per i migliori candidati (più il più vicino, per il confronto)
@@ -459,11 +530,13 @@ function render(fit){
   const nearest = res.reduce((m, x) => !m || x.air < m.air ? x : m, null);
   const save = nearest && nearest !== best ? nearest.c.total - best.c.total : 0;
   const bp = fuel === "metano" ? best.s.metano : best.s.benzina;
+  const bst = stato(best.s, fuel);
   $("#best").innerHTML = `<div class="totem">
     <div class="lbl">Il più conveniente · ${fuel}</div>
     <div class="name">${esc(best.s.nome || best.s.bandiera)}</div>
     <div class="addr">${esc(best.s.bandiera)} · ${esc(best.s.indirizzo)}, ${esc(best.s.comune)}</div>
     <div class="price"><div class="led">${priceHTML(bp)}</div><div class="unit">${unit}</div></div>
+    <div class="status"><b class="${{open:"ok", self:"sf", closed:"no"}[bst.k] || ""}">${esc(bst.txt)}</b>${fuel === "metano" && metanoModo(best.s) ? " · metano " + metanoModo(best.s) : ""}</div>
     <div class="sum">
       <span>${best.c.est ? "≈ " : ""}${fmt(best.c.distKm, 1)} km${best.c.dur ? " · " + min(best.c.dur) : ""}${p.ar ? " a tratta" : ""}</span>
       <span>Totale <b>${eur(best.c.total)}</b></span>
@@ -476,10 +549,13 @@ function render(fit){
     const s = x.s, c = x.c, v = fuel === "metano" ? s.metano : s.benzina, open = s.id === S.selected;
     const nav = `https://www.google.com/maps/dir/?api=1&origin=${S.origin[0]},${S.origin[1]}&destination=${s.lat},${s.lon}&travelmode=driving`;
     const waze = `https://waze.com/ul?ll=${s.lat},${s.lon}&navigate=yes`;
+    const st = stato(s, fuel), modo = metanoModo(s);
+    const oo = S.orari && S.orari[String(s.id)];
     const tollTxt = c.tollKm > 0.2 ? `${eur(c.tollEur)} <small>(${fmt(c.tollKm, 0)} km)</small>` : (x.hasToll && x.route?.noToll ? "0 · evitati" : "nessuno");
     return `<li data-id="${s.id}" aria-current="${open}">
       <div class="rk">${i + 1}</div>
       <div><div class="n">${esc(s.nome || s.bandiera)}${s.aut ? '<span class="pill aut">autostrada</span>' : ""}${x.old ? `<span class="pill old">prezzo del ${esc((x.agg||"").split("-").reverse().join("/"))}</span>` : ""}${c.est ? '<span class="pill est">stima</span>' : ""}</div>
+        <div><span class="pill ${st.k}" style="margin-left:0">${esc(st.txt)}</span>${fuel === "metano" && modo ? `<span class="pill mode">${modo === "self" ? "metano self" : modo === "con personale" ? "metano con personale" : "metano self e personale"}</span>` : ""}</div>
         <div class="a">${esc(s.bandiera)} · ${esc(s.comune)} · ${c.est ? "≈ " : ""}${fmt(c.distKm, 1)} km${c.dur ? " · " + min(c.dur) : ""}</div></div>
       <div><div class="p">${priceHTML(v)}</div><div class="tot">tot. <b>${eur(c.total)}</b></div></div>
       ${open ? `<div class="detail">
@@ -487,14 +563,45 @@ function render(fit){
         <div><span>Tragitto a metano</span><b class="m">${eur(c.tripM)}</b></div>
         <div><span>Tragitto a benzina</span><b class="b">${eur(c.tripB)}</b></div>
         <div><span>Pedaggi${p.ar ? " A/R" : ""}</span><b class="t">${tollTxt}</b></div>
-        <div><span>Metano qui</span>${s.metano != null ? fmt(s.metano, 3) + " €/kg" : "non disponibile"}</div>
+        <div><span>Metano qui</span>${s.metano == null ? "non disponibile" :
+          [s.metanoSelf != null ? fmt(s.metanoSelf, 3) + " self" : "", s.metanoServito != null ? fmt(s.metanoServito, 3) + " con personale" : ""].filter(Boolean).join("<br>") + " €/kg"}</div>
         <div><span>Benzina qui</span>${s.benzina != null ? fmt(s.benzina, 3) + " €/l" + (s.benzinaServito ? " (servito)" : " self") : "non disponibile"}</div>
+        ${oo ? `<div style="grid-column:1/-1"><span>Orari</span>${orariTxt(oo)}</div>` : ""}
       </div>
-      <div class="links"><a href="${nav}" target="_blank" rel="noopener">Naviga con Google Maps</a><a href="${waze}" target="_blank" rel="noopener">Waze</a></div>` : ""}
+      <div class="links"><a href="${nav}" target="_blank" rel="noopener">Naviga con Google Maps</a><a href="${waze}" target="_blank" rel="noopener">Waze</a><button type="button" class="pb" data-id="${s.id}">Controlla su Prezzi Benzina</button></div>` : ""}
     </li>`;
   }).join("");
 
   drawRoute(res.find(x => x.s.id === S.selected), fit);
+}
+function orariTxt(o){
+  const names = ["Lun","Mar","Mer","Gio","Ven","Sab","Dom","Festivi"];
+  const lab = c => c === "H" ? "24 ore" : c === "C" ? "chiuso" : c === "" ? "n.d." : c.replace(/ /g, ", ");
+  const rows = []; let i = 0;
+  while(i < 8){           // raggruppa i giorni consecutivi con lo stesso orario
+    let j = i; while(j + 1 < 7 && i < 7 && o.d[j+1][0] === o.d[i][0] && o.d[j+1][1] === o.d[i][1]) j++;
+    const days = j > i ? names[i] + "–" + names[j] : names[i];
+    rows.push(`${days}: ${esc(lab(o.d[i][0]))}${o.d[i][1] && o.d[i][0] !== "H" ? " + self" : ""}`);
+    i = j + 1;
+  }
+  if(o.d.every(x => x[0] === "")) return "non comunicati dal gestore";
+  return rows.join(" · ");
+}
+function toast(msg){
+  const t = document.createElement("div"); t.className = "toast"; t.textContent = msg; t.setAttribute("role", "status");
+  document.body.appendChild(t); setTimeout(() => t.remove(), 4000);
+}
+async function openPrezziBenzina(st){
+  const txt = [st.nome, st.indirizzo, st.comune].filter(Boolean).join(", ");
+  let copied = false;
+  try{ await navigator.clipboard.writeText(txt); copied = true; }catch(e){}
+  const ua = navigator.userAgent;
+  const url = /Android/i.test(ua)
+    ? "intent://#Intent;package=org.vernazza.androidfuel;S.browser_fallback_url=" + encodeURIComponent("https://play.google.com/store/apps/details?id=org.vernazza.androidfuel") + ";end"
+    : /iPhone|iPad|iPod/i.test(ua) ? "https://apps.apple.com/it/app/prezzi-benzina/id373044013"
+    : "https://www.prezzibenzina.it/";
+  toast(copied ? "Indirizzo copiato: incollalo nella ricerca di Prezzi Benzina" : "Cerca: " + txt);
+  setTimeout(() => { location.href = url; }, 350);
 }
 let lastFitKey = "";
 function drawRoute(x, fit){
@@ -524,7 +631,10 @@ function select(id, fromMap){
 
 /* ---------- eventi ---------- */
 document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => { S.fuel = b.dataset.fuel; S.selected = null; savePrefs(); compute(); }));
-$("#list").addEventListener("click", e => { if(e.target.closest("a")) return; const li = e.target.closest("li"); if(li) select(isNaN(+li.dataset.id) ? li.dataset.id : +li.dataset.id); });
+$("#list").addEventListener("click", e => {
+  const pb = e.target.closest("button.pb");
+  if(pb){ const st = S.stations.find(x => String(x.id) === pb.dataset.id); if(st) openPrezziBenzina(st); return; }
+  if(e.target.closest("a")) return; const li = e.target.closest("li"); if(li) select(isNaN(+li.dataset.id) ? li.dataset.id : +li.dataset.id); });
 $("#gps").addEventListener("click", gps);
 $("#search").addEventListener("submit", async e => {
   e.preventDefault(); const q = $("#q").value.trim(); if(!q) return;
@@ -537,6 +647,8 @@ $("#refresh").addEventListener("click", async () => {
   try{ await loadData(); }catch(e){ note(esc(e.message), true); }
   gps();
 });
+
+setInterval(() => { if(S.results.length && !document.hidden) render(false); }, 60000);   // aggiorna aperto/chiuso
 
 (async function start(){
   loadPrefs(); render();
