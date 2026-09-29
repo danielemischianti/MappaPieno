@@ -1,0 +1,45 @@
+name: Aggiorna prezzi e pubblica
+
+on:
+  schedule:
+    - cron: "40 6 * * *"    # ~08:40 ora italiana (legale), dopo la pubblicazione MIMIT
+    - cron: "10 11 * * *"   # secondo passaggio di sicurezza
+  workflow_dispatch:         # pulsante "Run workflow" per aggiornare a mano
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+env:
+  # Lascia vuoto per tutta Italia, oppure limita alle province: es. "RM,LT,FR,VT,RI"
+  PROVINCE: ""
+
+jobs:
+  build-deploy:
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deploy.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Scarica prezzi MIMIT
+        run: |
+          mkdir -p _site/data
+          python3 update.py --prov "$PROVINCE" --out _site/data/prezzi.json
+          cp index.html _site/
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deploy
+        uses: actions/deploy-pages@v4

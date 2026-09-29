@@ -1,0 +1,534 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#16212b">
+<title>Pieno Kamiq</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow:wght@400;500;600&family=Barlow+Condensed:wght@500;600;700&display=swap">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<style>
+:root{
+  --ink:#16212b; --ink-2:#4a5a68; --ink-3:#7b8a97;
+  --paper:#f2f4f3; --card:#ffffff; --line:#d9dfe2;
+  --metano:#1d68b0; --benzina:#23813a; --toll:#d08a00;
+  --led:#ffb21a; --led-bg:#121a21; --led-dim:#5c4a1c;
+  --good:#1f8a4c; --warn:#b86e00; --bad:#b83a2e;
+  --accent:var(--metano);
+  --shadow:0 1px 2px rgba(22,33,43,.08),0 6px 20px rgba(22,33,43,.08);
+  color-scheme:light;
+}
+@media (prefers-color-scheme:dark){
+  :root:not([data-theme="light"]){
+    --ink:#e7ecef; --ink-2:#a9b6c0; --ink-3:#7d8b96;
+    --paper:#0f161c; --card:#18222b; --line:#2a3743;
+    --metano:#5aa2e8; --benzina:#4fbf68; --toll:#f0a92a;
+    --led-bg:#0a0f13; --good:#46c07a; --warn:#e6a23c; --bad:#ef6a5c;
+    --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+    color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --ink:#e7ecef; --ink-2:#a9b6c0; --ink-3:#7d8b96;
+  --paper:#0f161c; --card:#18222b; --line:#2a3743;
+  --metano:#5aa2e8; --benzina:#4fbf68; --toll:#f0a92a;
+  --led-bg:#0a0f13; --good:#46c07a; --warn:#e6a23c; --bad:#ef6a5c;
+  --shadow:0 1px 2px rgba(0,0,0,.4),0 8px 24px rgba(0,0,0,.35);
+  color-scheme:dark;
+}
+body.fuel-benzina{--accent:var(--benzina)}
+*{box-sizing:border-box}
+html,body{height:100%;margin:0}
+body{background:var(--paper);color:var(--ink);font:15px/1.45 Barlow,system-ui,-apple-system,"Segoe UI",sans-serif;
+  display:grid;grid-template-rows:auto 1fr;padding-top:env(safe-area-inset-top,0px)}
+button,input,select{font:inherit;color:inherit}
+.num{font-variant-numeric:tabular-nums}
+h1,h2,h3{font-family:"Barlow Condensed",Barlow,sans-serif;margin:0;text-wrap:balance}
+
+/* barra */
+header{display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--ink);color:var(--paper)}
+:root[data-theme="dark"] header{background:#0a1015;color:var(--ink)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) header{background:#0a1015;color:var(--ink)}}
+header h1{white-space:nowrap;font-size:22px;font-weight:700;letter-spacing:.02em;text-transform:uppercase}
+header h1 span{color:var(--led)}
+header .meta{font-size:12px;opacity:.75;line-height:1.2}
+header .sp{flex:1}
+.icon-btn{border:1px solid rgba(255,255,255,.25);background:transparent;color:inherit;border-radius:8px;padding:6px 10px;cursor:pointer;font-weight:600;font-size:13px}
+.icon-btn:focus-visible,button:focus-visible,input:focus-visible,select:focus-visible,a:focus-visible{outline:2px solid var(--led);outline-offset:2px}
+
+/* layout */
+main{display:grid;grid-template-columns:1fr;grid-template-rows:42vh 1fr;min-height:0}
+#map{min-height:0;background:#cfd8dc}
+#panel{min-height:0;overflow-y:auto;padding:14px 16px calc(24px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:14px}
+@media (min-width:900px){
+  main{grid-template-columns:1fr 430px;grid-template-rows:1fr}
+  #panel{border-left:1px solid var(--line)}
+}
+
+/* controlli */
+.seg{display:grid;grid-template-columns:1fr 1fr;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:3px;gap:3px}
+.seg button{border:0;background:transparent;padding:9px 8px;border-radius:8px;cursor:pointer;font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:18px;letter-spacing:.04em;text-transform:uppercase;color:var(--ink-2)}
+.seg button[aria-pressed="true"]{color:#fff}
+.seg button[data-fuel="metano"][aria-pressed="true"]{background:var(--metano)}
+.seg button[data-fuel="benzina"][aria-pressed="true"]{background:var(--benzina)}
+:root[data-theme="dark"] .seg button[aria-pressed="true"]{color:#0b1116}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]) .seg button[aria-pressed="true"]{color:#0b1116}}
+.row{display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.chip{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--card);border-radius:999px;padding:6px 12px;font-size:13px;cursor:pointer}
+.chip input{accent-color:var(--accent);margin:0}
+.chip select{border:0;background:transparent;padding:0}
+.loc{display:flex;gap:8px;align-items:center;font-size:13px;color:var(--ink-2)}
+.loc b{color:var(--ink);font-weight:600}
+.btn{border:1px solid var(--line);background:var(--card);border-radius:8px;padding:7px 12px;cursor:pointer;font-weight:600;font-size:13px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+.search{display:flex;gap:8px}
+.search input{flex:1;min-width:0;border:1px solid var(--line);background:var(--card);border-radius:8px;padding:8px 10px}
+
+/* totem miglior prezzo */
+.totem{background:var(--led-bg);color:#dfe6ea;border-radius:12px;padding:14px 16px;display:grid;grid-template-columns:1fr auto;gap:4px 14px;box-shadow:var(--shadow)}
+.totem .lbl{font-family:"Barlow Condensed",sans-serif;text-transform:uppercase;letter-spacing:.12em;font-size:12px;color:#8fa0ac}
+.totem .name{font-family:"Barlow Condensed",sans-serif;font-size:22px;font-weight:600;line-height:1.1}
+.totem .addr{font-size:13px;color:#9fb0bb}
+.totem .price{grid-row:1/4;grid-column:2;align-self:center;text-align:right}
+.led{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:46px;line-height:1;color:var(--led);text-shadow:0 0 12px rgba(255,178,26,.35);font-variant-numeric:tabular-nums;letter-spacing:.02em}
+.led small{font-size:.62em}
+.totem .unit{font-size:12px;color:#8fa0ac;letter-spacing:.06em}
+.totem .sum{grid-column:1/3;display:flex;flex-wrap:wrap;gap:6px 16px;border-top:1px solid #26323c;margin-top:8px;padding-top:10px;font-size:14px}
+.totem .sum b{color:#fff;font-weight:600}
+.totem .save{color:#7fe0a2}
+
+/* lista */
+.list-h{display:flex;justify-content:space-between;align-items:baseline}
+.list-h h2{font-size:18px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-2)}
+.list-h span{font-size:12px;color:var(--ink-3)}
+ol.st{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px}
+.st li{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px 12px;cursor:pointer;display:grid;grid-template-columns:28px 1fr auto;gap:2px 10px;align-items:start}
+.st li[aria-current="true"]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.st .rk{font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:20px;color:var(--ink-3);line-height:1.2}
+.st li:first-child .rk{color:var(--accent)}
+.st .n{font-weight:600;line-height:1.25}
+.st .a{font-size:12.5px;color:var(--ink-2)}
+.st .p{text-align:right;font-family:"Barlow Condensed",sans-serif;font-weight:700;font-size:22px;line-height:1.1;font-variant-numeric:tabular-nums}
+.st .p small{font-size:.65em}
+.st .tot{text-align:right;font-size:12.5px;color:var(--ink-2)}
+.st .tot b{color:var(--ink);font-size:14px}
+.st .detail{grid-column:2/4;display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:6px 12px;margin-top:6px;font-size:13px}
+.st .detail div span{display:block;font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--ink-3)}
+.st .detail .m{color:var(--metano);font-weight:600}
+.st .detail .b{color:var(--benzina);font-weight:600}
+.st .detail .t{color:var(--toll);font-weight:600}
+.st .links{grid-column:2/4;display:flex;gap:8px;margin-top:8px;flex-wrap:wrap}
+.st .links a{font-size:13px;font-weight:600;color:var(--accent);text-decoration:none;border:1px solid var(--line);border-radius:8px;padding:5px 10px}
+.pill{display:inline-block;font-size:11px;font-weight:600;border-radius:999px;padding:1px 7px;margin-left:4px;vertical-align:1px}
+.pill.old{background:color-mix(in srgb,var(--warn) 18%,transparent);color:var(--warn)}
+.pill.aut{background:color-mix(in srgb,var(--ink-3) 18%,transparent);color:var(--ink-2)}
+.pill.est{background:color-mix(in srgb,var(--ink-3) 14%,transparent);color:var(--ink-3)}
+.pill.free{background:color-mix(in srgb,var(--good) 16%,transparent);color:var(--good)}
+.msg{background:var(--card);border:1px dashed var(--line);border-radius:10px;padding:12px;font-size:14px;color:var(--ink-2)}
+.msg.err{border-style:solid;border-color:var(--bad);color:var(--bad)}
+
+/* impostazioni */
+details.set{background:var(--card);border:1px solid var(--line);border-radius:10px}
+details.set summary{padding:10px 12px;cursor:pointer;font-weight:600;font-size:14px}
+.set .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px 14px;padding:0 12px 12px}
+.set label{display:flex;flex-direction:column;gap:3px;font-size:12px;color:var(--ink-2)}
+.set input{border:1px solid var(--line);background:var(--paper);border-radius:6px;padding:6px 8px;font-variant-numeric:tabular-nums}
+.foot{font-size:12px;color:var(--ink-3);line-height:1.5}
+.foot a{color:inherit}
+
+/* marker */
+.pm{background:var(--card);color:var(--ink);border:2px solid var(--c,#888);border-radius:7px;font:700 13px/1 "Barlow Condensed",sans-serif;padding:3px 5px;white-space:nowrap;box-shadow:0 1px 3px rgba(0,0,0,.3);transform:translate(-50%,-100%);position:absolute;font-variant-numeric:tabular-nums}
+.pm:after{content:"";position:absolute;left:50%;bottom:-6px;margin-left:-5px;border:5px solid transparent;border-top-color:var(--c,#888);border-bottom:0}
+.pm.best{background:var(--led-bg);color:var(--led);border-color:var(--led);font-size:15px;z-index:1000}
+.pm.sel{outline:2px solid var(--accent);outline-offset:1px}
+.me{width:18px;height:18px;border-radius:50%;background:#2a7de1;border:3px solid #fff;box-shadow:0 0 0 6px rgba(42,125,225,.25)}
+.leaflet-container{font-family:Barlow,system-ui,sans-serif}
+@media (prefers-reduced-motion:reduce){*{transition:none!important;animation:none!important}}
+</style>
+</head>
+<body class="fuel-metano">
+<header>
+  <h1>Pieno <span>Kamiq</span></h1>
+  <div class="meta" id="meta">Carico i prezzi…</div>
+  <div class="sp"></div>
+  <button class="icon-btn" id="refresh" title="Ricarica prezzi e posizione">Aggiorna</button>
+</header>
+<main>
+  <div id="map" role="region" aria-label="Mappa distributori"></div>
+  <section id="panel">
+    <div class="seg" role="group" aria-label="Carburante">
+      <button data-fuel="metano" aria-pressed="true">Metano</button>
+      <button data-fuel="benzina" aria-pressed="false">Benzina</button>
+    </div>
+
+    <div class="loc">
+      <span>Da: <b id="where">posizione non ancora nota</b></span>
+      <button class="btn" id="gps">📍 GPS</button>
+    </div>
+    <form class="search" id="search">
+      <input id="q" type="search" placeholder="Oppure cerca un indirizzo, es. Frascati" autocomplete="off">
+      <button class="btn" type="submit">Cerca</button>
+    </form>
+
+    <div class="row">
+      <label class="chip">Raggio
+        <select id="radius"><option>5</option><option>10</option><option selected>15</option><option>25</option><option>40</option></select> km
+      </label>
+      <label class="chip"><input type="checkbox" id="ar" checked> Andata e ritorno</label>
+      <label class="chip"><input type="checkbox" id="aut" checked> Aree autostradali</label>
+    </div>
+
+    <div id="best"></div>
+
+    <div class="list-h"><h2>Classifica per costo totale</h2><span id="count"></span></div>
+    <ol class="st" id="list"></ol>
+
+    <details class="set" id="settings">
+      <summary>Auto e parametri di calcolo</summary>
+      <div class="grid">
+        <label>Consumo metano (kg/100 km)<input id="c_m" type="number" step="0.1" min="1" value="4.9"></label>
+        <label>Consumo benzina (l/100 km)<input id="c_b" type="number" step="0.1" min="1" value="5.9"></label>
+        <label>Rifornimento metano (kg)<input id="q_m" type="number" step="0.5" min="1" value="12"></label>
+        <label>Rifornimento benzina (l)<input id="q_b" type="number" step="0.5" min="1" value="9"></label>
+        <label>Pedaggio stimato (€/km)<input id="toll" type="number" step="0.005" min="0" value="0.080"></label>
+        <label>Percorsi calcolati (max)<input id="topk" type="number" step="1" min="3" max="15" value="8"></label>
+      </div>
+      <div class="foot" style="padding:0 12px 12px">
+        Skoda Kamiq 1.5 TGI G-TEC (2020): serbatoi metano 13,8 kg, benzina 9 l. Il rifornimento predefinito
+        è quello tipico partendo dalla riserva. Il costo del tragitto usa il prezzo del distributore di arrivo;
+        se lì non c'è quel carburante, usa la mediana della zona.
+      </div>
+    </details>
+
+    <p class="foot">
+      Prezzi: open data MIMIT Osservaprezzi carburanti, comunicati dai gestori (la stessa base dei siti di confronto come prezzobenzina.it).
+      Percorsi: OSRM su dati © OpenStreetMap. I tratti a pedaggio vengono da OSM; il costo del pedaggio è una stima a chilometro,
+      le tangenziali e il GRA sono gratuiti. Tocca la mappa a lungo per spostare il punto di partenza.
+    </p>
+  </section>
+</main>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+"use strict";
+const OSRM = "https://router.project-osrm.org";   // server di percorso (dimostrativo, uso leggero)
+const DATA_URL = "data/prezzi.json";
+const STALE_DAYS = 7;
+const ROAD_FACTOR = 1.35;                          // stima percorso stradale / linea d'aria
+
+const $ = s => document.querySelector(s);
+const fmt = (n, d = 2) => n == null || isNaN(n) ? "–" : n.toLocaleString("it-IT", {minimumFractionDigits: d, maximumFractionDigits: d});
+const eur = n => "€ " + fmt(n, 2);
+const km = m => fmt(m / 1000, m < 10000 ? 1 : 0) + " km";
+const min = s => Math.max(1, Math.round(s / 60)) + " min";
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+function priceHTML(p){ if(p==null) return "–"; const s = fmt(p,3); return s.slice(0,-1) + "<small>" + s.slice(-1) + "</small>"; }
+
+/* ---------- stato ---------- */
+const S = {
+  fuel: "metano", data: null, stations: [], origin: null, originLabel: "",
+  selected: null, routes: new Map(), results: [], busy: 0,
+};
+const PREF_KEYS = ["c_m","c_b","q_m","q_b","toll","topk","radius","ar","aut"];
+function loadPrefs(){
+  try{
+    const p = JSON.parse(localStorage.getItem("pienoKamiq") || "{}");
+    for(const k of PREF_KEYS){ const el = $("#"+k); if(!el || p[k]==null) continue; el.type==="checkbox" ? el.checked = p[k] : el.value = p[k]; }
+    if(p.fuel) S.fuel = p.fuel;
+    if(p.origin) { S.origin = p.origin; S.originLabel = p.originLabel || "ultima posizione"; }
+  }catch(e){}
+}
+function savePrefs(){
+  try{
+    const p = {fuel:S.fuel, origin:S.origin, originLabel:S.originLabel};
+    for(const k of PREF_KEYS){ const el = $("#"+k); p[k] = el.type==="checkbox" ? el.checked : el.value; }
+    localStorage.setItem("pienoKamiq", JSON.stringify(p));
+  }catch(e){}
+}
+const P = () => ({
+  cm: +$("#c_m").value || 4.9, cb: +$("#c_b").value || 5.9,
+  qm: +$("#q_m").value || 12, qb: +$("#q_b").value || 9,
+  toll: +$("#toll").value || 0, topk: Math.min(15, Math.max(3, +$("#topk").value || 8)),
+  radius: +$("#radius").value * 1000, ar: $("#ar").checked, aut: $("#aut").checked,
+});
+
+/* ---------- mappa ---------- */
+const map = L.map("map", {zoomControl: true, attributionControl: true}).setView([41.9, 12.5], 9);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom: 19, attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
+}).addTo(map);
+const layerSt = L.layerGroup().addTo(map);
+const layerRoute = L.layerGroup().addTo(map);
+let meMarker = null, radiusCircle = null;
+map.on("contextmenu", e => setOrigin([e.latlng.lat, e.latlng.lng], "punto scelto sulla mappa"));
+new ResizeObserver(() => map.invalidateSize()).observe($("#map"));
+
+/* ---------- dati ---------- */
+async function loadData(){
+  $("#meta").textContent = "Carico i prezzi…";
+  const r = await fetch(DATA_URL + "?t=" + Date.now(), {cache: "no-store"});
+  if(!r.ok) throw new Error("Non trovo " + DATA_URL + " (HTTP " + r.status + "). Esegui update.py o controlla la GitHub Action.");
+  const d = await r.json();
+  const i = Object.fromEntries(d.campi.map((c, n) => [c, n]));
+  S.stations = d.impianti.map(a => ({
+    id: a[i.id], nome: a[i.nome], bandiera: a[i.bandiera], indirizzo: a[i.indirizzo], comune: a[i.comune], prov: a[i.prov],
+    aut: !!a[i.autostrada], lat: a[i.lat], lon: a[i.lon],
+    benzina: a[i.benzina_self] ?? a[i.benzina_servito], benzinaServito: a[i.benzina_self] == null && a[i.benzina_servito] != null,
+    metano: a[i.metano], aggB: a[i.agg_benzina], aggM: a[i.agg_metano],
+  }));
+  S.data = d;
+  const e = d.estrazione ? d.estrazione.split("-").reverse().join("/") : "";
+  $("#meta").innerHTML = `Prezzi MIMIT del ${esc(e)}<br>${S.stations.length.toLocaleString("it-IT")} impianti`;
+}
+
+/* ---------- posizione ---------- */
+function gps(){
+  if(!navigator.geolocation){ note("Il browser non fornisce la posizione: cerca un indirizzo o tieni premuto sulla mappa."); return; }
+  $("#where").textContent = "rilevo la posizione…";
+  navigator.geolocation.getCurrentPosition(
+    p => setOrigin([p.coords.latitude, p.coords.longitude], "la tua posizione (±" + Math.round(p.coords.accuracy) + " m)"),
+    err => { $("#where").textContent = S.originLabel || "posizione non disponibile";
+             note("Posizione non disponibile (" + esc(err.message) + "). Serve https o localhost e il permesso del browser. Puoi cercare un indirizzo o tenere premuto sulla mappa."); if(S.origin) compute(); },
+    {enableHighAccuracy: true, timeout: 15000, maximumAge: 60000});
+}
+async function geocode(q){
+  const u = "https://nominatim.openstreetmap.org/search?format=json&limit=1&countrycodes=it&accept-language=it&q=" + encodeURIComponent(q);
+  const r = await fetch(u, {headers: {"Accept": "application/json"}});
+  const j = await r.json();
+  if(!j.length) throw new Error("Indirizzo non trovato");
+  return [[+j[0].lat, +j[0].lon], j[0].display_name.split(",").slice(0, 3).join(",")];
+}
+function setOrigin(ll, label){
+  S.origin = ll; S.originLabel = label; S.selected = null;
+  $("#where").textContent = label;
+  savePrefs(); compute();
+}
+
+/* ---------- geometria ---------- */
+function hav(a, b){
+  const R = 6371000, r = Math.PI / 180;
+  const dLa = (b[0]-a[0])*r, dLo = (b[1]-a[1])*r;
+  const x = Math.sin(dLa/2)**2 + Math.cos(a[0]*r)*Math.cos(b[0]*r)*Math.sin(dLo/2)**2;
+  return 2*R*Math.asin(Math.sqrt(x));
+}
+const median = arr => { const a = arr.filter(x => x != null).sort((x,y)=>x-y); return a.length ? a[Math.floor(a.length/2)] : null; };
+
+/* ---------- percorsi OSRM ---------- */
+async function osrmRoute(from, to, noToll){
+  const key = from.map(x=>x.toFixed(4)).join(",") + ">" + to.join(",") + (noToll ? "|nt" : "");
+  if(S.routes.has(key)) return S.routes.get(key);
+  const url = `${OSRM}/route/v1/driving/${from[1]},${from[0]};${to[1]},${to[0]}?overview=false&steps=true&geometries=geojson${noToll ? "&exclude=toll" : ""}`;
+  const pr = fetch(url).then(r => r.ok ? r.json() : Promise.reject(new Error("OSRM " + r.status))).then(j => {
+    if(j.code !== "Ok" || !j.routes?.length) throw new Error(j.message || j.code);
+    const rt = j.routes[0]; let tollM = 0; const segs = [];
+    for(const st of rt.legs[0].steps){
+      const toll = (st.intersections || []).some(x => (x.classes || []).includes("toll"));
+      if(toll) tollM += st.distance;
+      if(st.geometry?.coordinates?.length > 1) segs.push({toll, pts: st.geometry.coordinates.map(c => [c[1], c[0]])});
+    }
+    return {dist: rt.distance, dur: rt.duration, tollM, segs, noToll: !!noToll};
+  });
+  S.routes.set(key, pr);
+  pr.catch(() => S.routes.delete(key));
+  return pr;
+}
+async function pool(items, n, fn){
+  const out = new Array(items.length); let i = 0;
+  await Promise.all(Array.from({length: n}, async () => { while(i < items.length){ const k = i++; try{ out[k] = await fn(items[k]); }catch(e){ out[k] = null; } } }));
+  return out;
+}
+
+/* ---------- costi ---------- */
+function costs(st, route, p, ref){
+  const mult = p.ar ? 2 : 1;
+  const distKm = route ? route.dist/1000 : hav(S.origin, [st.lat, st.lon]) * ROAD_FACTOR / 1000;
+  const tollKm = route ? route.tollM/1000 : 0;
+  const pm = st.metano ?? ref.m, pb = st.benzina ?? ref.b;         // prezzo per valorizzare il carburante del tragitto
+  const tollEur = tollKm * p.toll * mult;
+  const tripM = distKm * mult * p.cm / 100 * pm + tollEur;
+  const tripB = distKm * mult * p.cb / 100 * pb + tollEur;
+  const price = S.fuel === "metano" ? st.metano : st.benzina;
+  const fill = price * (S.fuel === "metano" ? p.qm : p.qb);
+  const trip = S.fuel === "metano" ? tripM : tripB;
+  return {distKm, tollKm, tollEur, tripM, tripB, fill, trip, total: fill + trip, dur: route ? route.dur : null, est: !route};
+}
+function pickRoute(st, a, b, p, ref){
+  // a = percorso più veloce, b = percorso senza pedaggi (se esiste): tieni il più economico per il carburante scelto
+  if(!a) return b; if(!b) return a;
+  const ca = costs(st, a, p, ref), cb = costs(st, b, p, ref);
+  return cb.trip + 0.005 < ca.trip ? b : a;
+}
+
+let runId = 0;
+async function compute(){
+  if(!S.data || !S.origin) { render(); return; }
+  const id = ++runId, p = P(), fuel = S.fuel, today = new Date();
+  const inR = S.stations.filter(s => (fuel === "metano" ? s.metano : s.benzina) != null && (p.aut || !s.aut))
+    .map(s => ({s, air: hav(S.origin, [s.lat, s.lon])})).filter(x => x.air <= p.radius);
+  const ref = {
+    m: median(S.stations.filter(s => s.metano != null && hav(S.origin, [s.lat, s.lon]) < 40000).map(s => s.metano)),
+    b: median(S.stations.filter(s => s.benzina != null && hav(S.origin, [s.lat, s.lon]) < 40000).map(s => s.benzina)),
+  };
+  S.ref = ref;
+  let res = inR.map(x => {
+    const agg = fuel === "metano" ? x.s.aggM : x.s.aggB;
+    const age = agg ? (today - new Date(agg)) / 864e5 : 99;
+    return {s: x.s, air: x.air, route: null, c: costs(x.s, null, p, ref), old: age > STALE_DAYS, agg};
+  }).sort((a, b) => a.c.total - b.c.total);
+  S.results = res; render(true);
+
+  // percorsi reali per i migliori candidati (più il più vicino, per il confronto)
+  const nearest = res.reduce((m, x) => !m || x.air < m.air ? x : m, null);
+  const cand = res.slice(0, p.topk); if(nearest && !cand.includes(nearest)) cand.push(nearest);
+  S.busy++; render(true);
+  await pool(cand, 3, async x => {
+    const to = [x.s.lat, x.s.lon];
+    const fast = await osrmRoute(S.origin, to, false).catch(() => null);
+    let alt = null;
+    if(fast && fast.tollM > 200) alt = await osrmRoute(S.origin, to, true).catch(() => null);
+    x.route = pickRoute(x.s, fast, alt, p, ref);
+    x.hasToll = !!(fast && fast.tollM > 200);
+    if(x.route) x.c = costs(x.s, x.route, p, ref);
+    if(id === runId){ res.sort((a, b) => (a.c.est - b.c.est) || (a.c.total - b.c.total)); render(true); }
+  });
+  S.busy--;
+  if(id !== runId) return;
+  res.sort((a, b) => (a.c.est - b.c.est) || (a.c.total - b.c.total));
+  if(res.length && res.every(x => x.c.est)) note("Il servizio dei percorsi non risponde: distanze stimate in linea d'aria × " + fmt(ROAD_FACTOR, 2) + ".");
+  render(true);
+}
+
+/* ---------- interfaccia ---------- */
+function note(html, err){ const el = $("#best"); el.innerHTML = `<div class="msg${err ? " err" : ""}">${html}</div>`; }
+function priceColor(v, lo, hi){
+  const t = hi > lo ? (v - lo) / (hi - lo) : 0;
+  const h = 130 - 125 * Math.min(1, Math.max(0, t));
+  return `hsl(${h} 60% 40%)`;
+}
+function render(fit){
+  const p = P(), fuel = S.fuel, unit = fuel === "metano" ? "€/kg" : "€/l";
+  document.body.className = "fuel-" + fuel;
+  document.querySelectorAll(".seg button").forEach(b => b.setAttribute("aria-pressed", b.dataset.fuel === fuel));
+  layerSt.clearLayers();
+  if(S.origin){
+    if(!meMarker) meMarker = L.marker(S.origin, {icon: L.divIcon({className: "", html: '<div class="me"></div>', iconSize: [18,18], iconAnchor: [9,9]}), draggable: true, zIndexOffset: 2000})
+      .on("dragend", e => { const ll = e.target.getLatLng(); setOrigin([ll.lat, ll.lng], "punto scelto sulla mappa"); }).addTo(map);
+    meMarker.setLatLng(S.origin);
+    if(!radiusCircle) radiusCircle = L.circle(S.origin, {radius: p.radius, color: "#2a7de1", weight: 1, fillOpacity: .03, interactive: false}).addTo(map);
+    radiusCircle.setLatLng(S.origin).setRadius(p.radius);
+  }
+  const res = S.results;
+  $("#count").textContent = S.origin ? `${res.length} nel raggio${S.busy ? " · calcolo percorsi…" : ""}` : "";
+  if(!S.data) return;
+  if(!S.origin){ note("Premi <b>📍 GPS</b>, cerca un indirizzo oppure tieni premuto sulla mappa per scegliere il punto di partenza."); $("#list").innerHTML = ""; return; }
+  if(!res.length){ note(`Nessun distributore di ${fuel} con prezzo aggiornato entro ${p.radius/1000} km. Allarga il raggio.`); $("#list").innerHTML = ""; layerRoute.clearLayers(); return; }
+
+  const prices = res.map(x => fuel === "metano" ? x.s.metano : x.s.benzina);
+  const lo = Math.min(...prices), hi = Math.max(...prices);
+  const best = res[0];
+  if(!S.selected || !res.find(x => x.s.id === S.selected)) S.selected = best.s.id;
+
+  for(const x of res){
+    const v = fuel === "metano" ? x.s.metano : x.s.benzina;
+    const cls = "pm" + (x === best ? " best" : "") + (x.s.id === S.selected ? " sel" : "");
+    L.marker([x.s.lat, x.s.lon], {
+      icon: L.divIcon({className: "", html: `<div class="${cls}" style="--c:${priceColor(v, lo, hi)}">${fmt(v, 3)}</div>`, iconSize: [0,0]}),
+      zIndexOffset: x === best ? 1000 : (x.s.id === S.selected ? 900 : 0), title: x.s.nome,
+    }).on("click", () => select(x.s.id, true)).addTo(layerSt);
+  }
+
+  // totem
+  const nearest = res.reduce((m, x) => !m || x.air < m.air ? x : m, null);
+  const save = nearest && nearest !== best ? nearest.c.total - best.c.total : 0;
+  const bp = fuel === "metano" ? best.s.metano : best.s.benzina;
+  $("#best").innerHTML = `<div class="totem">
+    <div class="lbl">Il più conveniente · ${fuel}</div>
+    <div class="name">${esc(best.s.nome || best.s.bandiera)}</div>
+    <div class="addr">${esc(best.s.bandiera)} · ${esc(best.s.indirizzo)}, ${esc(best.s.comune)}</div>
+    <div class="price"><div class="led">${priceHTML(bp)}</div><div class="unit">${unit}</div></div>
+    <div class="sum">
+      <span>${best.c.est ? "≈ " : ""}${fmt(best.c.distKm, 1)} km${best.c.dur ? " · " + min(best.c.dur) : ""}${p.ar ? " a tratta" : ""}</span>
+      <span>Totale <b>${eur(best.c.total)}</b></span>
+      ${save > 0.05 ? `<span class="save">risparmi ${eur(save)} rispetto al più vicino</span>` : ""}
+    </div></div>`;
+
+  // lista
+  const qty = fuel === "metano" ? `${fmt(p.qm, 1)} kg` : `${fmt(p.qb, 1)} l`;
+  $("#list").innerHTML = res.slice(0, 40).map((x, i) => {
+    const s = x.s, c = x.c, v = fuel === "metano" ? s.metano : s.benzina, open = s.id === S.selected;
+    const nav = `https://www.google.com/maps/dir/?api=1&origin=${S.origin[0]},${S.origin[1]}&destination=${s.lat},${s.lon}&travelmode=driving`;
+    const waze = `https://waze.com/ul?ll=${s.lat},${s.lon}&navigate=yes`;
+    const tollTxt = c.tollKm > 0.2 ? `${eur(c.tollEur)} <small>(${fmt(c.tollKm, 0)} km)</small>` : (x.hasToll && x.route?.noToll ? "0 · evitati" : "nessuno");
+    return `<li data-id="${s.id}" aria-current="${open}">
+      <div class="rk">${i + 1}</div>
+      <div><div class="n">${esc(s.nome || s.bandiera)}${s.aut ? '<span class="pill aut">autostrada</span>' : ""}${x.old ? `<span class="pill old">prezzo del ${esc((x.agg||"").split("-").reverse().join("/"))}</span>` : ""}${c.est ? '<span class="pill est">stima</span>' : ""}</div>
+        <div class="a">${esc(s.bandiera)} · ${esc(s.comune)} · ${c.est ? "≈ " : ""}${fmt(c.distKm, 1)} km${c.dur ? " · " + min(c.dur) : ""}</div></div>
+      <div><div class="p">${priceHTML(v)}</div><div class="tot">tot. <b>${eur(c.total)}</b></div></div>
+      ${open ? `<div class="detail">
+        <div><span>Rifornimento ${qty}</span>${eur(c.fill)}</div>
+        <div><span>Tragitto a metano</span><b class="m">${eur(c.tripM)}</b></div>
+        <div><span>Tragitto a benzina</span><b class="b">${eur(c.tripB)}</b></div>
+        <div><span>Pedaggi${p.ar ? " A/R" : ""}</span><b class="t">${tollTxt}</b></div>
+        <div><span>Metano qui</span>${s.metano != null ? fmt(s.metano, 3) + " €/kg" : "non disponibile"}</div>
+        <div><span>Benzina qui</span>${s.benzina != null ? fmt(s.benzina, 3) + " €/l" + (s.benzinaServito ? " (servito)" : " self") : "non disponibile"}</div>
+      </div>
+      <div class="links"><a href="${nav}" target="_blank" rel="noopener">Naviga con Google Maps</a><a href="${waze}" target="_blank" rel="noopener">Waze</a></div>` : ""}
+    </li>`;
+  }).join("");
+
+  drawRoute(res.find(x => x.s.id === S.selected), fit);
+}
+let lastFitKey = "";
+function drawRoute(x, fit){
+  layerRoute.clearLayers();
+  if(!x) return;
+  const accent = getComputedStyle(document.body).getPropertyValue("--accent").trim() || "#1d68b0";
+  const toll = getComputedStyle(document.documentElement).getPropertyValue("--toll").trim() || "#d08a00";
+  if(x.route){
+    for(const sg of x.route.segs){
+      L.polyline(sg.pts, {color: "#fff", weight: 8, opacity: .8, interactive: false}).addTo(layerRoute);
+      L.polyline(sg.pts, {color: sg.toll ? toll : accent, weight: 5, dashArray: sg.toll ? "8 6" : null, interactive: false}).addTo(layerRoute);
+    }
+  } else {
+    L.polyline([S.origin, [x.s.lat, x.s.lon]], {color: accent, weight: 3, dashArray: "4 6", interactive: false}).addTo(layerRoute);
+  }
+  const key = S.origin.join() + x.s.id + (x.route ? "r" : "");
+  if(fit && key !== lastFitKey){
+    lastFitKey = key;
+    const pts = x.route ? x.route.segs.flatMap(s => s.pts) : [S.origin, [x.s.lat, x.s.lon]];
+    map.fitBounds(L.latLngBounds(pts.concat([S.origin])), {padding: [40, 40], maxZoom: 15});
+  }
+}
+function select(id, fromMap){
+  S.selected = id; render(true);
+  if(fromMap){ const li = document.querySelector(`#list li[data-id="${id}"]`); li?.scrollIntoView({block: "nearest", behavior: "smooth"}); }
+}
+
+/* ---------- eventi ---------- */
+document.querySelectorAll(".seg button").forEach(b => b.addEventListener("click", () => { S.fuel = b.dataset.fuel; S.selected = null; savePrefs(); compute(); }));
+$("#list").addEventListener("click", e => { if(e.target.closest("a")) return; const li = e.target.closest("li"); if(li) select(isNaN(+li.dataset.id) ? li.dataset.id : +li.dataset.id); });
+$("#gps").addEventListener("click", gps);
+$("#search").addEventListener("submit", async e => {
+  e.preventDefault(); const q = $("#q").value.trim(); if(!q) return;
+  try{ const [ll, label] = await geocode(q); setOrigin(ll, label); }
+  catch(err){ note(esc(err.message) + ". Prova con via e comune.", true); }
+});
+for(const k of PREF_KEYS) $("#"+k).addEventListener("change", () => { savePrefs(); compute(); });
+$("#refresh").addEventListener("click", async () => {
+  S.routes.clear();
+  try{ await loadData(); }catch(e){ note(esc(e.message), true); }
+  gps();
+});
+
+(async function start(){
+  loadPrefs(); render();
+  if(S.origin){ $("#where").textContent = S.originLabel; map.setView(S.origin, 12); }
+  try{ await loadData(); }catch(e){ note(esc(e.message), true); return; }
+  if(S.origin) compute();
+  gps();
+})();
+</script>
+</body>
+</html>
