@@ -45,7 +45,7 @@ jobs:
         run: |
           python3 orari.py --prezzi _site/data/prezzi.json \
             --cache "${{ steps.pages.outputs.base_url }}/data/orari.json" \
-            --out _site/data/orari.json --max 6000
+            --out _site/data/orari.json --max 6000 --thread 4
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
