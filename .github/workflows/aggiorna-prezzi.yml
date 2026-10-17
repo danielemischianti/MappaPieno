@@ -37,7 +37,8 @@ jobs:
       - name: Scarica prezzi MIMIT
         run: |
           mkdir -p _site/data
-          python3 update.py --prov "$PROVINCE" --out _site/data/prezzi.json
+          python3 update.py --prov "$PROVINCE" --out _site/data/prezzi.json \
+            --fallback "${{ steps.pages.outputs.base_url }}/data/prezzi.json"
           cp index.html manifest.webmanifest _site/ && cp -r icons _site/
       - name: Aggiorna orari di apertura
         timeout-minutes: 25

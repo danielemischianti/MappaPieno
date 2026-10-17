@@ -19,6 +19,8 @@ import io
 import json
 import os
 import sys
+import time
+import traceback
 import urllib.request
 
 URL_ANAGRAFICA = "https://www.mimit.gov.it/images/exportCSV/anagrafica_impianti_attivi.csv"
@@ -33,10 +35,22 @@ METANO = {"metano"}
 LGNC = {"l-gnc"}
 
 
-def fetch(url):
+def fetch(url, attempts=4):
+    """Scarica con alcuni tentativi: il sito MIMIT a volte non risponde per qualche minuto."""
     req = urllib.request.Request(url, headers={"User-Agent": "pieno-kamiq/1.0 (uso personale)"})
-    with urllib.request.urlopen(req, timeout=120) as r:
-        raw = r.read()
+    for n in range(attempts):
+        try:
+            with urllib.request.urlopen(req, timeout=120) as r:
+                raw = r.read()
+            if raw[:200].lstrip().lower().startswith((b"<!doctype", b"<html")):
+                raise ValueError("il server ha risposto con una pagina HTML invece del CSV")
+            break
+        except Exception as e:
+            if n == attempts - 1:
+                raise RuntimeError(f"download non riuscito dopo {attempts} tentativi ({url}): {e}") from e
+            wait = (20, 60, 120)[min(n, 2)]
+            print(f"Tentativo {n + 1} fallito ({e}), riprovo tra {wait} s", file=sys.stderr)
+            time.sleep(wait)
     for enc in ("utf-8", "cp1252", "latin-1"):
         try:
             return raw.decode(enc)
@@ -101,13 +115,59 @@ def title(s):
     return s.title() if s.isupper() else s
 
 
+def gh(level, msg):
+    """Messaggio visibile nel riepilogo della GitHub Action (annotazione)."""
+    if os.environ.get("GITHUB_ACTIONS"):
+        print(f"::{level}::{msg}")
+    print(msg, file=sys.stderr)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--anagrafica", default=URL_ANAGRAFICA)
     ap.add_argument("--prezzi", default=URL_PREZZI)
     ap.add_argument("--prov", default="", help="sigle provincia separate da virgola, es. RM,LT")
+    ap.add_argument("--fallback", default="", help="file o URL dei dati pubblicati in precedenza, usati se il MIMIT non risponde")
+    ap.add_argument("--max-giorni-fallback", type=int, default=3)
     ap.add_argument("--out", default=os.path.join(os.path.dirname(os.path.abspath(__file__)), "data", "prezzi.json"))
     args = ap.parse_args()
+    try:
+        build(args)
+    except Exception as e:
+        reason = f"{type(e).__name__}: {e}"
+        traceback.print_exc()
+        if use_fallback(args, reason):
+            return
+        gh("error", "Aggiornamento prezzi fallito, il sito resta con i dati precedenti. " + reason)
+        sys.exit(1)
+
+
+def use_fallback(args, reason):
+    if not args.fallback:
+        return False
+    try:
+        if args.fallback.startswith("http"):
+            req = urllib.request.Request(args.fallback + "?t=" + str(int(time.time())), headers={"User-Agent": "pieno-kamiq/1.0"})
+            with urllib.request.urlopen(req, timeout=60) as r:
+                old = json.load(r)
+        else:
+            with open(args.fallback, encoding="utf-8") as f:
+                old = json.load(f)
+        age = (dt.date.today() - dt.date.fromisoformat(old["estrazione"])).days
+    except Exception as e:
+        gh("warning", f"Dati precedenti non disponibili: {e}")
+        return False
+    if age > args.max_giorni_fallback:
+        gh("error", f"Aggiornamento non riuscito e i dati già pubblicati hanno {age} giorni, troppo vecchi per riusarli. {reason}")
+        return False
+    os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
+    with open(args.out, "w", encoding="utf-8") as f:
+        json.dump(old, f, ensure_ascii=False, separators=(",", ":"))
+    gh("warning", f"Prezzi MIMIT non aggiornati oggi ({reason}). Ripubblicati i dati del {old['estrazione']}; si riprova al prossimo giro.")
+    return True
+
+
+def build(args):
     provs = {p.strip().upper() for p in args.prov.split(",") if p.strip()}
 
     print("Scarico anagrafica…", file=sys.stderr)
@@ -117,6 +177,12 @@ def main():
 
     ia = {k: i for i, k in enumerate(h_a)}
     ip = {k: i for i, k in enumerate(h_p)}
+    need_a = {"idImpianto", "Bandiera", "Nome Impianto", "Indirizzo", "Comune", "Provincia", "Latitudine", "Longitudine"}
+    need_p = {"idImpianto", "descCarburante", "prezzo", "isSelf", "dtComu"}
+    if not need_a <= ia.keys():
+        raise ValueError(f"formato anagrafica cambiato, mancano le colonne {sorted(need_a - ia.keys())}; trovate: {h_a}")
+    if not need_p <= ip.keys():
+        raise ValueError(f"formato prezzi cambiato, mancano le colonne {sorted(need_p - ip.keys())}; trovate: {h_p}")
 
     stations = {}
     for r in r_a:
@@ -182,7 +248,9 @@ def main():
         "campi": fields,
         "impianti": out,
     }
-    os.makedirs(os.path.dirname(args.out), exist_ok=True)
+    if not provs and len(out) < 10000:
+        raise ValueError(f"solo {len(out)} impianti con prezzi (di solito oltre 20.000): dati MIMIT incompleti")
+    os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     tmp = args.out + ".tmp"
     with open(tmp, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, separators=(",", ":"))
