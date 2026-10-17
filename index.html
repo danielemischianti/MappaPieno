@@ -318,7 +318,9 @@ async function loadData(){
     S.orari = o.ok ? (await o.json()).orari || {} : {};
   }catch(e){ S.orari = {}; }
   const e = d.estrazione ? d.estrazione.split("-").reverse().join("/") : "";
-  $("#meta").innerHTML = `Prezzi MIMIT del ${esc(e)}<br>${S.stations.length.toLocaleString("it-IT")} impianti`;
+  const ageDays = d.estrazione ? Math.floor((Date.now() - new Date(d.estrazione)) / 864e5) : 0;
+  $("#meta").innerHTML = (ageDays > 2 ? `<span style="color:var(--led)">⚠ Prezzi MIMIT fermi al ${esc(e)}</span>` : `Prezzi MIMIT del ${esc(e)}`)
+    + `<br>${S.stations.length.toLocaleString("it-IT")} impianti`;
 }
 
 /* ---------- posizione ---------- */
