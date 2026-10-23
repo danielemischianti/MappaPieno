@@ -8,22 +8,14 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: Prove di connessione
+      - name: API ospz
         run: |
-          probe () {
-            label="$1"; shift
-            out=$(curl -sS -o /dev/null -m 25 -w "%{http_code} %{time_total}s ip=%{remote_ip}" "$@" 2>&1 | tr '\n' ' ')
-            echo "::notice title=$label::$out"
-          }
-          probe "IP del runner" https://api.ipify.org -o /dev/stdout
-          curl -sS -m 10 https://ipinfo.io/json | tr -d '\n' | sed 's/^/::notice title=ipinfo::/'; echo
-          probe "mimit home https" https://www.mimit.gov.it/
-          probe "mimit csv https" -r 0-200 https://www.mimit.gov.it/images/exportCSV/prezzo_alle_8.csv
-          probe "mimit csv http" -r 0-200 http://www.mimit.gov.it/images/exportCSV/prezzo_alle_8.csv
-          probe "mimit csv ipv4" -4 -r 0-200 https://www.mimit.gov.it/images/exportCSV/prezzo_alle_8.csv
-          probe "mimit csv ipv6" -6 -r 0-200 https://www.mimit.gov.it/images/exportCSV/prezzo_alle_8.csv
-          probe "mimit senza www" -r 0-200 https://mimit.gov.it/images/exportCSV/prezzo_alle_8.csv
-          probe "mise vecchio dominio" -r 0-200 https://www.mise.gov.it/images/exportCSV/prezzo_alle_8.csv
-          probe "ospzApi scheda" https://carburanti.mise.gov.it/ospzApi/registry/servicearea/49315
-          probe "ospzApi zona POST" -X POST -H "Content-Type: application/json" -d '{"points":[{"lat":41.82,"lng":12.69}],"radius":5}' https://carburanti.mise.gov.it/ospzApi/search/zone
-          echo "::notice title=DNS::$(getent hosts www.mimit.gov.it | tr '\n' ' ') / $(getent hosts carburanti.mise.gov.it | tr '\n' ' ')"
+          B=https://carburanti.mise.gov.it/ospzApi
+          show () { label="$1"; shift; body=$(curl -sS -m 30 "$@" 2>&1 | head -c 700 | tr '\n\r' '  ' | sed 's/::/: :/g'); echo "::notice title=$label::$body"; }
+          show "zona POST" -X POST -H "Content-Type: application/json" -d '{"points":[{"lat":41.82,"lng":12.69}],"radius":3}' $B/search/zone
+          show "area POST RM" -X POST -H "Content-Type: application/json" -d '{"province":"RM","fuelType":"3-x","priceOrder":"asc"}' $B/search/area
+          show "regioni" $B/registry/region
+          show "province" "$B/registry/province?regionId=12"
+          show "carburanti" $B/registry/fuels
+          size=$(curl -sS -m 60 -X POST -H "Content-Type: application/json" -d '{"region":12,"fuelType":"3-x","priceOrder":"asc"}' $B/search/area | wc -c); echo "::notice title=area regione 12 bytes::$size"
+          size=$(curl -sS -m 60 -X POST -H "Content-Type: application/json" -d '{"points":[{"lat":41.9,"lng":12.5}],"radius":50}' $B/search/zone | wc -c); echo "::notice title=zona 50km bytes::$size"
