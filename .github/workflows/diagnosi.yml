@@ -8,14 +8,25 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: API ospz
+      - name: API ospz area
         run: |
           B=https://carburanti.mise.gov.it/ospzApi
-          show () { label="$1"; shift; body=$(curl -sS -m 30 "$@" 2>&1 | head -c 700 | tr '\n\r' '  ' | sed 's/::/: :/g'); echo "::notice title=$label::$body"; }
-          show "zona POST" -X POST -H "Content-Type: application/json" -d '{"points":[{"lat":41.82,"lng":12.69}],"radius":3}' $B/search/zone
-          show "area POST RM" -X POST -H "Content-Type: application/json" -d '{"province":"RM","fuelType":"3-x","priceOrder":"asc"}' $B/search/area
-          show "regioni" $B/registry/region
-          show "province" "$B/registry/province?regionId=12"
-          show "carburanti" $B/registry/fuels
-          size=$(curl -sS -m 60 -X POST -H "Content-Type: application/json" -d '{"region":12,"fuelType":"3-x","priceOrder":"asc"}' $B/search/area | wc -c); echo "::notice title=area regione 12 bytes::$size"
-          size=$(curl -sS -m 60 -X POST -H "Content-Type: application/json" -d '{"points":[{"lat":41.9,"lng":12.5}],"radius":50}' $B/search/zone | wc -c); echo "::notice title=zona 50km bytes::$size"
+          q () { curl -sS -m 90 -X POST -H "Content-Type: application/json" -d "$1" $B/search/area; }
+          q '{"region":9,"fuelType":"1-x","priceOrder":"asc"}' > b.json
+          q '{"region":9,"fuelType":"3-x","priceOrder":"asc"}' > m.json
+          q '{"region":9}' > n.json
+          q '{"region":9,"province":"RM","fuelType":"3-x","priceOrder":"asc"}' > p.json
+          python3 - <<'PY'
+          import json
+          for f in ["b.json","m.json","n.json","p.json"]:
+              try:
+                  d=json.load(open(f)); r=d.get("results") or []
+                  print(f"::notice title={f}::success={d.get('success')} n={len(r)} keys={sorted(r[0].keys()) if r else None}")
+              except Exception as e:
+                  print(f"::notice title={f}::errore {e} {open(f).read()[:300]}")
+          r=json.load(open("m.json"))["results"]
+          one=next((x for x in r if x.get("id")==49315), r[0])
+          print("::notice title=esempio::"+json.dumps(one,ensure_ascii=False)[:1800])
+          ids=[x["id"] for x in json.load(open("b.json"))["results"]]
+          print(f"::notice title=benzina Lazio::{len(ids)} impianti, id unici {len(set(ids))}")
+          PY
