@@ -2,8 +2,7 @@ name: Aggiorna prezzi e pubblica
 
 on:
   schedule:
-    - cron: "40 6 * * *"    # ~08:40 ora italiana (legale), dopo la pubblicazione MIMIT
-    - cron: "10 11 * * *"   # secondo passaggio di sicurezza
+    - cron: "20 5,9,13,17 * * *"   # quattro volte al giorno (ora italiana circa 7, 11, 15, 19; GitHub può ritardare)
   workflow_dispatch:         # pulsante "Run workflow" per aggiornare a mano
   push:
     branches: [main]
@@ -35,10 +34,15 @@ jobs:
       - id: pages
         uses: actions/configure-pages@v5
       - name: Scarica prezzi MIMIT
+        env:
+          BASE: ${{ steps.pages.outputs.base_url }}
         run: |
           mkdir -p _site/data
-          python3 update.py --prov "$PROVINCE" --out _site/data/prezzi.json \
-            --fallback "${{ steps.pages.outputs.base_url }}/data/prezzi.json"
+          # 1) servizio Osservaprezzi (carburanti.mise.gov.it): prezzi in vigore al momento della lettura
+          # 2) se non risponde, i file CSV delle 8 (www.mimit.gov.it, da ottobre 2026 irraggiungibile da GitHub)
+          # 3) se falliscono entrambi, i dati del giorno prima (massimo 3 giorni)
+          python3 update_api.py --out _site/data/prezzi.json --precedente "$BASE/data/prezzi.json" \
+            || python3 update.py --prov "$PROVINCE" --out _site/data/prezzi.json --fallback "$BASE/data/prezzi.json"
           cp index.html manifest.webmanifest _site/ && cp -r icons _site/
       - name: Aggiorna orari di apertura
         timeout-minutes: 25
@@ -47,7 +51,7 @@ jobs:
           python3 orari.py --prezzi _site/data/prezzi.json \
             --cache "${{ steps.pages.outputs.base_url }}/data/orari.json" \
             --out _site/data/orari.json --thread 4 \
-            --max ${{ github.event_name == 'push' && '0' || '6000' }}   # a ogni modifica del codice si pubblica subito, riusando gli orari già scaricati
+            --max ${{ github.event_name == 'push' && '0' || '3000' }}   # a ogni modifica del codice si pubblica subito, riusando gli orari già scaricati
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site

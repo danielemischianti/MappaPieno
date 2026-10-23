@@ -4,7 +4,7 @@ Mappa per trovare il distributore di **metano** o **benzina** più conveniente r
 con il costo reale del tragitto (pedaggi compresi) per una Skoda Kamiq 1.5 TGI G-TEC del 2020.
 
 - Posizione dal GPS del telefono, da un indirizzo o tenendo premuto sulla mappa.
-- Prezzi ufficiali MIMIT (Osservaprezzi carburanti), aggiornati ogni mattina.
+- Prezzi ufficiali MIMIT (Osservaprezzi carburanti), letti quattro volte al giorno dal servizio del Ministero.
 - Percorsi stradali reali (OSRM / OpenStreetMap). I tratti a pedaggio sono tratteggiati in arancio;
   tra il percorso più veloce e le alternative viene scelto il più economico.
 - Classifica per **costo totale** = pieno (13,8 kg di metano o 9 l di benzina) + tragitto (andata e ritorno, disattivabile).
@@ -65,6 +65,13 @@ Gli orari non sono nei file giornalieri: `orari.py` legge la scheda di ogni dist
 al massimo 6000 schede per esecuzione (prima quelle mai lette, iniziando dai distributori di metano, poi quelle
 più vecchie di 7 giorni). Il resto viene preso dal file pubblicato il giorno prima. Al primo avvio servono
 un paio di giorni per coprire tutta Italia.
+
+## Da dove arrivano i prezzi
+
+`update_api.py` legge il servizio Osservaprezzi (`carburanti.mise.gov.it/ospzApi`), lo stesso del sito ufficiale
+del Ministero: una richiesta per regione, prezzi in vigore al momento della lettura. Da ottobre 2026 i file CSV
+su www.mimit.gov.it non rispondono più ai server di GitHub; `update.py` (CSV) resta come seconda scelta, e se
+falliscono entrambi si ripubblicano i dati precedenti per al massimo 3 giorni.
 
 ## Fonti e servizi
 - Prezzi: MIMIT, open data Osservaprezzi carburanti (`anagrafica_impianti_attivi.csv`, `prezzo_alle_8.csv`).

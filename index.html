@@ -318,8 +318,14 @@ async function loadData(){
     S.orari = o.ok ? (await o.json()).orari || {} : {};
   }catch(e){ S.orari = {}; }
   const e = d.estrazione ? d.estrazione.split("-").reverse().join("/") : "";
-  const ageDays = d.estrazione ? Math.floor((Date.now() - new Date(d.estrazione)) / 864e5) : 0;
-  $("#meta").innerHTML = (ageDays > 2 ? `<span style="color:var(--led)">⚠ Prezzi MIMIT fermi al ${esc(e)}</span>` : `Prezzi MIMIT del ${esc(e)}`)
+  let label = `Prezzi MIMIT del ${esc(e)}`, ageDays = d.estrazione ? Math.floor((Date.now() - new Date(d.estrazione)) / 864e5) : 0;
+  if(d.aggiornato){   // prezzi letti dal servizio Osservaprezzi: data e ora della lettura
+    const t = new Date(d.aggiornato);
+    ageDays = Math.floor((Date.now() - t) / 864e5);
+    label = "Prezzi MIMIT delle " + t.toLocaleTimeString("it-IT", {hour: "2-digit", minute: "2-digit", timeZone: "Europe/Rome"})
+          + " del " + t.toLocaleDateString("it-IT", {day: "2-digit", month: "2-digit", timeZone: "Europe/Rome"});
+  }
+  $("#meta").innerHTML = (ageDays > 2 ? `<span style="color:var(--led)">⚠ ${label.replace("Prezzi MIMIT", "Prezzi MIMIT fermi:")}</span>` : label)
     + `<br>${S.stations.length.toLocaleString("it-IT")} impianti`;
 }
 
