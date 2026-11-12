@@ -8,25 +8,30 @@ jobs:
   probe:
     runs-on: ubuntu-latest
     steps:
-      - name: API ospz area
+      - name: Confronto pubblicato / live
         run: |
-          B=https://carburanti.mise.gov.it/ospzApi
-          q () { curl -sS -m 90 -X POST -H "Content-Type: application/json" -d "$1" $B/search/area; }
-          q '{"region":9,"fuelType":"1-x","priceOrder":"asc"}' > b.json
-          q '{"region":9,"fuelType":"3-x","priceOrder":"asc"}' > m.json
-          q '{"region":9}' > n.json
-          q '{"region":9,"province":"RM","fuelType":"3-x","priceOrder":"asc"}' > p.json
           python3 - <<'PY'
-          import json
-          for f in ["b.json","m.json","n.json","p.json"]:
-              try:
-                  d=json.load(open(f)); r=d.get("results") or []
-                  print(f"::notice title={f}::success={d.get('success')} n={len(r)} keys={sorted(r[0].keys()) if r else None}")
-              except Exception as e:
-                  print(f"::notice title={f}::errore {e} {open(f).read()[:300]}")
-          r=json.load(open("m.json"))["results"]
-          one=next((x for x in r if x.get("id")==49315), r[0])
-          print("::notice title=esempio::"+json.dumps(one,ensure_ascii=False)[:1800])
-          ids=[x["id"] for x in json.load(open("b.json"))["results"]]
-          print(f"::notice title=benzina Lazio::{len(ids)} impianti, id unici {len(set(ids))}")
+          import json, urllib.request
+          pub = json.load(urllib.request.urlopen("https://danielemischianti.github.io/MappaPieno/data/prezzi.json"))
+          c = {k:i for i,k in enumerate(pub["campi"])}
+          P = {r[c["id"]]: r for r in pub["impianti"]}
+          req = urllib.request.Request("https://carburanti.mise.gov.it/ospzApi/search/zone",
+                data=json.dumps({"points":[{"lat":41.8229547,"lng":12.6925007}],"radius":20}).encode(),
+                headers={"Content-Type":"application/json","User-Agent":"pieno-kamiq/1.0"})
+          live = json.load(urllib.request.urlopen(req, timeout=60))["results"]
+          lines=[]
+          for x in live:
+              f = {(q["fuelId"], q["isSelf"]): q["price"] for q in x["fuels"]}
+              p = P.get(x["id"])
+              m_live = min([v for (fid,s),v in f.items() if fid==3], default=None)
+              b_live = f.get((1,True))
+              if m_live is None and x["id"] not in (49315,): 
+                  if not b_live: continue
+              m_pub = p[c["metano"]] if p else None; b_pub = p[c["benzina_self"]] if p else None
+              if m_live is not None or m_pub is not None:
+                  lines.append(f"M {x['id']} {x['name'][:28]} live={m_live} pub={m_pub} ins={x['insertDate'][:16]}")
+          diff_b = sum(1 for x in live if P.get(x["id"]) and {(q['fuelId'],q['isSelf']):q['price'] for q in x['fuels']}.get((1,True)) not in (None, P[x['id']][c['benzina_self']]))
+          print(f"::notice title=pubblicato::{pub['aggiornato']} impianti entro 20 km live={len(live)} benzina self diversa da pubblicato={diff_b}")
+          for i in range(0, len(lines), 6):
+              print("::notice title=metano " + str(i) + "::" + " || ".join(lines[i:i+6]))
           PY
