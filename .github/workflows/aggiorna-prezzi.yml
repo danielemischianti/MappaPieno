@@ -2,7 +2,7 @@ name: Aggiorna prezzi e pubblica
 
 on:
   schedule:
-    - cron: "20 5,9,13,17 * * *"   # quattro volte al giorno (ora italiana circa 7, 11, 15, 19; GitHub può ritardare)
+    - cron: "7,37 4-21 * * *"   # ogni mezz'ora dalle 5 alle 23 circa (ora italiana); GitHub a volte salta o ritarda un giro
   workflow_dispatch:         # pulsante "Run workflow" per aggiornare a mano
   push:
     branches: [main]
@@ -45,15 +45,30 @@ jobs:
             || python3 update.py --prov "$PROVINCE" --out _site/data/prezzi.json --fallback "$BASE/data/prezzi.json"
           cp index.html manifest.webmanifest _site/ && cp -r icons _site/
       - name: Aggiorna orari di apertura
+        env:
+          # a ogni giro si rileggono al massimo 300 schede, solo quelle più vecchie di 7 giorni
+          # (in tutto circa 3000 al giorno); a ogni modifica del codice si riusano quelle già pubblicate
+          ORARI_MAX: ${{ github.event_name == 'push' && '0' || '300' }}
         timeout-minutes: 25
         continue-on-error: true   # se il servizio orari non risponde, si pubblicano comunque i prezzi
         run: |
           python3 orari.py --prezzi _site/data/prezzi.json \
             --cache "${{ steps.pages.outputs.base_url }}/data/orari.json" \
             --out _site/data/orari.json --thread 4 \
-            --max ${{ github.event_name == 'push' && '0' || '3000' }}   # a ogni modifica del codice si pubblica subito, riusando gli orari già scaricati
-      - uses: actions/upload-pages-artifact@v3
+            --max $ORARI_MAX
+      - id: up1
+        uses: actions/upload-pages-artifact@v3
+        continue-on-error: true   # il servizio artefatti di GitHub a volte risponde con un errore temporaneo
         with:
           path: _site
+      - if: steps.up1.outcome == 'failure'
+        run: sleep 60
+      - if: steps.up1.outcome == 'failure'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+          name: github-pages-retry
       - id: deploy
         uses: actions/deploy-pages@v4
+        with:
+          artifact_name: ${{ steps.up1.outcome == 'failure' && 'github-pages-retry' || 'github-pages' }}

@@ -128,10 +128,11 @@ def main():
             p[key] = min(price, p.get(key, price))
         if not p:
             continue
-        day = ""
+        day = when = ""
         if x.get("insertDate"):
             try:
-                day = dt.datetime.fromisoformat(x["insertDate"]).date().isoformat()
+                t = dt.datetime.fromisoformat(x["insertDate"]).astimezone(ROME)
+                day, when = t.date().isoformat(), t.strftime("%Y-%m-%dT%H:%M")
             except ValueError:
                 day = str(x["insertDate"])[:10]
         via, comune, prov = parse_address(x.get("address"))
@@ -145,7 +146,7 @@ def main():
                     old.get("indirizzo") or via, old.get("comune") or comune, old.get("prov") or prov, aut,
                     round(lat, 5), round(lon, 5), p.get("bs"), p.get("bv"), m,
                     day if ("bs" in p or "bv" in p) else "", day if m is not None else "",
-                    p.get("ms"), p.get("mv")])
+                    p.get("ms"), p.get("mv"), when])
 
     if not args.regioni and len(out) < 15000:
         raise SystemExit(gh("error", f"Solo {len(out)} impianti dal servizio MIMIT (di solito oltre 20.000): dati incompleti, non pubblico") or 1)
@@ -158,7 +159,7 @@ def main():
         "generato": now.strftime("%Y-%m-%dT%H:%M:%SZ"),
         "campi": ["id", "nome", "bandiera", "indirizzo", "comune", "prov", "autostrada", "lat", "lon",
                   "benzina_self", "benzina_servito", "metano", "agg_benzina", "agg_metano",
-                  "metano_self", "metano_servito"],
+                  "metano_self", "metano_servito", "comunicato"],
         "impianti": out,
     }
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)

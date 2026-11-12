@@ -311,6 +311,7 @@ async function loadData(){
     metano: a[i.metano], aggB: a[i.agg_benzina], aggM: a[i.agg_metano],
     benzinaSelf: a[i.benzina_self], metanoSelf: i.metano_self != null ? a[i.metano_self] : null,
     metanoServito: i.metano_servito != null ? a[i.metano_servito] : a[i.metano],
+    comunicato: i.comunicato != null ? a[i.comunicato] || "" : "",
   }));
   S.data = d;
   try{
@@ -467,6 +468,15 @@ function stato(s, fuel){
   if(self) return {k: "closed", txt: closedTxt + (fuel === "metano" ? " · self solo per benzina" : ""), avail: false};
   return {k: "closed", txt: closedTxt, avail: false};
 }
+// "2026-11-12T09:09" -> "oggi alle 09:09" / "ieri alle 22:46" / "09/11 alle 17:23"
+function quando(iso){
+  if(!iso) return "";
+  const [d, t] = iso.split("T"), now = romeNow();
+  const today = `${now.y}-${String(now.m).padStart(2,"0")}-${String(now.d).padStart(2,"0")}`;
+  const y = new Date(Date.UTC(now.y, now.m - 1, now.d - 1)).toISOString().slice(0, 10);
+  const day = d === today ? "oggi" : d === y ? "ieri" : d.slice(8, 10) + "/" + d.slice(5, 7);
+  return t ? `${day} alle ${t}` : day;
+}
 function metanoModo(s){
   if(s.metanoSelf != null && s.metanoServito != null) return "self e con personale";
   if(s.metanoSelf != null) return "self";
@@ -564,7 +574,7 @@ function render(fit){
     <div class="name">${esc(best.s.nome || best.s.bandiera)}</div>
     <div class="addr">${esc(best.s.bandiera)} · ${esc(best.s.indirizzo)}, ${esc(best.s.comune)}</div>
     <div class="price"><div class="led">${priceHTML(bp)}</div><div class="unit">${unit}</div></div>
-    <div class="status"><b class="${{open:"ok", self:"sf", closed:"no"}[bst.k] || ""}">${esc(bst.txt)}</b>${fuel === "metano" && metanoModo(best.s) ? " · metano " + metanoModo(best.s) : ""}</div>
+    <div class="status"><b class="${{open:"ok", self:"sf", closed:"no"}[bst.k] || ""}">${esc(bst.txt)}</b>${fuel === "metano" && metanoModo(best.s) ? " · metano " + metanoModo(best.s) : ""}${best.s.comunicato ? " · prezzo comunicato " + quando(best.s.comunicato) : ""}</div>
     <div class="sum">
       <span>${best.c.est ? "≈ " : ""}${fmt(best.c.distKm, 1)} km${best.c.dur ? " · " + min(best.c.dur) : ""}${p.ar ? " a tratta" : ""}</span>
       <span>Totale <b>${eur(best.c.total)}</b></span>
@@ -594,6 +604,7 @@ function render(fit){
         <div><span>Metano qui</span>${s.metano == null ? "non disponibile" :
           [s.metanoSelf != null ? fmt(s.metanoSelf, 3) + " self" : "", s.metanoServito != null ? fmt(s.metanoServito, 3) + " con personale" : ""].filter(Boolean).join("<br>") + " €/kg"}</div>
         <div><span>Benzina qui</span>${s.benzina != null ? fmt(s.benzina, 3) + " €/l" + (s.benzinaServito ? " (servito)" : " self") : "non disponibile"}</div>
+        ${s.comunicato ? `<div style="grid-column:1/-1"><span>Prezzo comunicato dal gestore</span>${quando(s.comunicato)}</div>` : ""}
         ${oo ? `<div style="grid-column:1/-1"><span>Orari</span>${orariTxt(oo)}</div>` : ""}
       </div>
       <div class="links"><a href="${nav}" target="_blank" rel="noopener">Naviga con Google Maps</a><a href="${waze}" target="_blank" rel="noopener">Waze</a><button type="button" class="pb" data-id="${s.id}">Controlla su Prezzi Benzina</button><button type="button" class="hide" data-id="${s.id}">${fuel === "metano" ? "Non ha il metano: nascondi" : "Nascondi"}</button></div>` : ""}
